@@ -150,7 +150,7 @@ async function main() {
 
   injectStyles();
 
-  const cfg = await fetch("./config.json", { cache: "no-store" }).then(r => r.json());
+  const cfg = await fetch("https://matthew-callmother.github.io/estimator/config.json", { cache: "no-store" }).then(r => r.json());
   $("#footnote").textContent = cfg.result_copy?.disclaimer || "";
 
   const saved = safeParseJSON(localStorage.getItem(STORAGE_KEY), null);
@@ -565,3 +565,4 @@ async function main() {
 main().catch(err => {
   document.body.innerHTML = `<pre style="padding:16px">Error loading estimator: ${String(err)}</pre>`;
 });
+
