@@ -297,7 +297,11 @@ async function main() {
   }
 
   function isAnswered(q) {
-    if (q.type === "single_select") return !!state.answers[q.id];
+    if (q.type === "single_select") {
+      // treat any defined, non-empty value as answered (avoid truthiness issues like 0 being falsy)
+      const v = state.answers[q.id];
+      return v !== undefined && v !== null && String(v).length > 0;
+    }
     if (q.type === "details_gate") {
       const nameOk = String(state.lead.name || "").trim().length > 0;
       const phoneOk = normalizePhone(state.lead.phone).length === 10;
@@ -313,7 +317,7 @@ async function main() {
     const vq = visibleQuestions().filter(q => q.type === "single_select");
     const rows = vq.map(q => {
       const val = state.answers[q.id];
-      const label = (q.options || []).find(o => o.value === val)?.label || val || "";
+      const label = (q.options || []).find(o => String(o.value) === String(val))?.label || val || "";
       return el("div", { class: "sumRow" }, [
         el("div", { class: "sumKey" }, [q.title]),
         el("div", { class: "sumVal" }, [label])
@@ -406,21 +410,24 @@ async function main() {
     // Body
     if (q.type === "single_select") {
       const wrap = el("div", { class: "panel" });
-      const currentVal = state.answers[q.id];
+      // Normalize the current stored answer to a string for reliable comparison
+      const currentVal = state.answers[q.id] !== undefined && state.answers[q.id] !== null ? String(state.answers[q.id]) : "";
 
       q.options.forEach(opt => {
-        const active = currentVal === opt.value;
+        const optVal = String(opt.value);
+        const active = currentVal === optVal;
         const img = opt.image_url ? el("img", { class: "oimg", src: opt.image_url, loading: "lazy", alt: "" }) : null;
 
         wrap.appendChild(el("label", { class: `choice ${active ? "active" : ""}` }, [
           el("input", {
             type: "radio",
             name: q.id,
-            value: opt.value,
+            value: optVal,
             checked: active ? "checked" : null,
-            onChange: () => {
-              state.answers[q.id] = opt.value;
-              if (q.id === "fuel" && opt.value !== "gas") delete state.answers["venting"];
+            onChange: (e) => {
+              // store the value coming from the input (string) to avoid type mismatches (e.g. 0 vs "0")
+              state.answers[q.id] = e.target.value;
+              if (q.id === "fuel" && e.target.value !== "gas") delete state.answers["venting"];
               render();
             }
           }),
