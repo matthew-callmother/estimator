@@ -413,29 +413,46 @@ async function main() {
       // Normalize the current stored answer to a string for reliable comparison
       const currentVal = state.answers[q.id] !== undefined && state.answers[q.id] !== null ? String(state.answers[q.id]) : "";
 
+      // NOTE: changed to handle clicks on the whole choice card as well as input change
+      // This avoids cases where CSS/overlays make the <input> not receive events while the label appears clickable.
       q.options.forEach(opt => {
         const optVal = String(opt.value);
         const active = currentVal === optVal;
         const img = opt.image_url ? el("img", { class: "oimg", src: opt.image_url, loading: "lazy", alt: "" }) : null;
 
-        wrap.appendChild(el("label", { class: `choice ${active ? "active" : ""}` }, [
-          el("input", {
-            type: "radio",
-            name: q.id,
-            value: optVal,
-            checked: active ? "checked" : null,
-            onChange: (e) => {
-              // store the value coming from the input (string) to avoid type mismatches (e.g. 0 vs "0")
-              state.answers[q.id] = e.target.value;
-              if (q.id === "fuel" && e.target.value !== "gas") delete state.answers["venting"];
-              render();
-            }
-          }),
-          el("div", { class: "choiceMain" }, [
-            el("div", { class: "choiceLabel" }, [opt.label]),
-            img ? el("div", { class: "choiceImg" }, [img]) : el("div", { class: "choiceImg placeholder" }, [""])
-          ])
-        ]));
+        // Create label/card and attach click handler to the whole card
+        const card = el("label", {
+          class: `choice ${active ? "active" : ""}`,
+          onClick: (e) => {
+            // clicking the card should set the value and re-render
+            // guard: if clicking the underlying input will also trigger change — that's fine
+            state.answers[q.id] = optVal;
+            if (q.id === "fuel" && optVal !== "gas") delete state.answers["venting"];
+            render();
+          }
+        });
+
+        const input = el("input", {
+          type: "radio",
+          name: q.id,
+          value: optVal,
+          checked: active ? "checked" : null,
+          // keep onchange so keyboard selection (space/arrow keys) still updates state
+          onChange: (e) => {
+            state.answers[q.id] = e.target.value;
+            if (q.id === "fuel" && e.target.value !== "gas") delete state.answers["venting"];
+            render();
+          }
+        });
+
+        const main = el("div", { class: "choiceMain" }, [
+          el("div", { class: "choiceLabel" }, [opt.label]),
+          img ? el("div", { class: "choiceImg" }, [img]) : el("div", { class: "choiceImg placeholder" }, [""])
+        ]);
+
+        card.appendChild(input);
+        card.appendChild(main);
+        wrap.appendChild(card);
       });
 
       app.appendChild(wrap);
