@@ -1,0 +1,146 @@
+{
+  "meta": {
+    "version": "v1",
+    "lock_hours": 72,
+    "currency": "USD"
+  },
+  "pricing": {
+    "base_price": {
+      "tank_gas": 4200,
+      "tank_electric": 3400,
+      "tankless_gas": 7900,
+      "tankless_electric": 6400
+    },
+    "modifiers": {
+      "location": {
+        "garage": 0,
+        "attic": 650,
+        "closet": 450,
+        "other": 550
+      },
+      "venting": {
+        "standard": 0,
+        "power_vent": 950,
+        "not_sure": 450,
+        "na": 0
+      },
+      "access": {
+        "easy": 0,
+        "tight": 550,
+        "not_sure": 300
+      },
+      "urgency": {
+        "asap": 250,
+        "week": 0,
+        "month": 0
+      },
+      "fuel_not_sure_penalty": 350
+    },
+    "safety": {
+      "round_to": 25,
+      "max_reasonable_price": 20000,
+      "min_reasonable_price": 500
+    }
+  },
+  "questions": [
+    {
+      "id": "type",
+      "type": "single_select",
+      "title": "What kind of water heater do you have?",
+      "subtitle": "This sets the equipment + labor baseline.",
+      "tooltip": "Tankless installs usually require more labor and venting considerations.",
+      "image_url": "",
+      "options": [
+        { "value": "tank", "label": "Tank", "image_url": "" },
+        { "value": "tankless", "label": "Tankless", "image_url": "" }
+      ]
+    },
+    {
+      "id": "fuel",
+      "type": "single_select",
+      "title": "What fuel does it use?",
+      "subtitle": "Fuel affects venting, hookups, and code requirements.",
+      "tooltip": "If you’re not sure, we add padding to avoid false precision.",
+      "options": [
+        { "value": "gas", "label": "Gas", "image_url": "" },
+        { "value": "electric", "label": "Electric", "image_url": "" },
+        { "value": "not_sure", "label": "Not sure", "image_url": "" }
+      ]
+    },
+    {
+      "id": "location",
+      "type": "single_select",
+      "title": "Where is the water heater installed?",
+      "subtitle": "Access and safety requirements can change install time.",
+      "tooltip": "Attic installs often require more time and safety setup.",
+      "options": [
+        { "value": "garage", "label": "Garage", "image_url": "" },
+        { "value": "attic", "label": "Attic", "image_url": "" },
+        { "value": "closet", "label": "Closet", "image_url": "" },
+        { "value": "other", "label": "Other", "image_url": "" }
+      ]
+    },
+    {
+      "id": "venting",
+      "type": "single_select",
+      "title": "What type of venting does it have?",
+      "subtitle": "Gas venting can materially change parts + labor.",
+      "tooltip": "If you pick “Not sure,” we include a safety buffer.",
+      "depends_on": { "question_id": "fuel", "equals": "gas" },
+      "options": [
+        { "value": "standard", "label": "Standard vent", "image_url": "" },
+        { "value": "power_vent", "label": "Power vent", "image_url": "" },
+        { "value": "not_sure", "label": "Not sure", "image_url": "" }
+      ]
+    },
+    {
+      "id": "access",
+      "type": "single_select",
+      "title": "How easy is the access to the heater?",
+      "subtitle": "Tight spaces take longer and need more care.",
+      "tooltip": "‘Tight’ means limited clearance to work safely around the unit.",
+      "options": [
+        { "value": "easy", "label": "Easy", "image_url": "" },
+        { "value": "tight", "label": "Tight", "image_url": "" },
+        { "value": "not_sure", "label": "Not sure", "image_url": "" }
+      ]
+    },
+    {
+      "id": "urgency",
+      "type": "single_select",
+      "title": "How soon do you need hot water back?",
+      "subtitle": "Timing helps us set expectations and prioritize.",
+      "tooltip": "ASAP may require schedule shuffling, which can affect cost slightly.",
+      "options": [
+        { "value": "asap", "label": "ASAP (no hot water)", "image_url": "" },
+        { "value": "week", "label": "This week", "image_url": "" },
+        { "value": "month", "label": "1–4 weeks", "image_url": "" }
+      ]
+    },
+    {
+      "id": "details_gate",
+      "type": "details_gate",
+      "title": "Enter your details to lock in your estimate for 72 hours",
+      "subtitle": "You’ll see your results next. You can still go back and change answers."
+    },
+    {
+      "id": "results_preview",
+      "type": "results_preview",
+      "title": "Your estimate",
+      "subtitle": "Review your estimate before submitting."
+    }
+  ],
+  "result_copy": {
+    "includes": [
+      "Removal + haul-away",
+      "Standard installation materials",
+      "Code-required basics (as applicable)"
+    ],
+    "could_change": [
+      "Venting or access differs from selections",
+      "Hidden damage or unexpected platform work",
+      "Non-standard gas/electrical changes beyond a typical swap"
+    ],
+    "disclaimer": "This is an estimate based on your selections. Final price can change if conditions differ on-site."
+  }
+}
