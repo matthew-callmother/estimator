@@ -243,8 +243,15 @@ async function loadConfig() {
 async function main() {
   injectStyles();
 
-  const mount = document.getElementById(MOUNT_ID);
-  if (!mount) throw new Error(`Missing mount element #${MOUNT_ID}. Add <div id="${MOUNT_ID}"></div> before this script.`);
+  // Try to find the mount element; if missing (common in script-embed setups)
+  // create it at the end of <body> so the estimator can still boot.
+  let mount = document.getElementById(MOUNT_ID);
+  if (!mount) {
+    mount = document.createElement("div");
+    mount.id = MOUNT_ID;
+    document.body.appendChild(mount);
+    console.warn(`Estimator: created missing mount element #${MOUNT_ID} automatically.`);
+  }
   ROOT = mount;
 
   mount.innerHTML = `
