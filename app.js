@@ -466,3 +466,241 @@
                 ])
               );
             }
+
+            if (qq.type === "form") {
+              (qq.fields || []).forEach((f) => {
+                const ans = state.answers[f.id];
+                if (isEmpty(ans)) return;
+                block.appendChild(
+                  mk("div", { class: "summaryRow" }, [
+                    mk("div", { class: "summaryK" }, [f.label || f.id]),
+                    mk("div", { class: "summaryV" }, [String(ans)]),
+                  ])
+                );
+              });
+            }
+          });
+
+          if (!isEmpty(state.answers.municipality_city)) {
+            block.appendChild(
+              mk("div", { class: "summaryRow" }, [
+                mk("div", { class: "summaryK" }, ["Municipality"]),
+                mk("div", { class: "summaryV" }, [String(state.answers.municipality_city)]),
+              ])
+            );
+          }
+          if (!isEmpty(state.answers.permit_fee_usd)) {
+            block.appendChild(
+              mk("div", { class: "summaryRow" }, [
+                mk("div", { class: "summaryK" }, ["Permit fee"]),
+                mk("div", { class: "summaryV" }, [`$${money(Number(state.answers.permit_fee_usd) || 0)}`]),
+              ])
+            );
+          }
+          if (state.answers.expansion_tank_required === true) {
+            block.appendChild(
+              mk("div", { class: "summaryRow" }, [
+                mk("div", { class: "summaryK" }, ["Expansion tank"]),
+                mk("div", { class: "summaryV" }, ["Required"]),
+              ])
+            );
+          }
+
+          content.appendChild(block);
+        } else if (q?.type === "submit") {
+          content.appendChild(mk("div", { class: "note" }, [q.note || "Submit your info to lock in this estimate."]));
+        } else if (q?.type === "loading_lookup") {
+          // If you ever include a loading_lookup in the visible wizard, render it properly.
+          const fillId = `loadfill_${q.id}`;
+          content.appendChild(
+            mk("div", { class: "loading" }, [
+              mk("div", { class: "loadingInner" }, [
+                mk("div", { class: "spinner" }),
+                mk("div", { class: "loadingTitle" }, [q.title || "Checking…"]),
+                mk("div", { class: "loadingSub" }, [q.subtitle || ""]),
+                mk("div", { class: "loadBar" }, [
+                  mk("div", { id: fillId, class: "loadFill", style: "width:0%" })
+                ])
+              ])
+            ])
+          );
+
+          const ranKey = `__ran_${q.id}`;
+          if (!state.answers[ranKey]) {
+            state.answers[ranKey] = "1";
+
+            const duration = Number(q.duration_ms || 1400);
+            const start = Date.now();
+
+            const tick = () => {
+              const el = document.getElementById(fillId);
+              if (!el) return;
+              const t = Math.min(1, (Date.now() - start) / duration);
+              const eased = 1 - Math.pow(1 - t, 2);
+              el.style.width = `${Math.min(92, Math.round(eased * 100))}%`;
+              if (t < 1) requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+
+            (async () => {
+              try { await runLookup(state, q.lookup); }
+              catch (e) { console.warn("Lookup failed:", e); state.answers.municipality_found = false; }
+
+              const el = document.getElementById(fillId);
+              if (el) el.style.width = "100%";
+
+              const elapsed = Date.now() - start;
+              const remaining = Math.max(0, duration - elapsed);
+
+              setTimeout(() => {
+                if (q.auto_advance !== false) {
+                  state.stepIndex++;
+                  render();
+                }
+              }, remaining + 250);
+            })();
+          }
+        } else {
+          content.appendChild(mk("div", { class: "note" }, ["Unsupported question type."]));
+        }
+
+        // --- Nav ---
+        const canGoBack = state.stepIndex > 0;
+        const stepOk = isQuestionComplete(q, state.answers);
+
+        container.appendChild(
+          mk("div", { class: "nav" }, [
+            mk(
+              "button",
+              {
+                class: "btn secondary",
+                disabled: !canGoBack,
+                onClick: () => {
+                  const prev = backIndexSkippingTransients(vq, state.stepIndex);
+                  if (prev < state.stepIndex - 1) clearLookupState(vq); // re-query on forward
+                  state.stepIndex = prev;
+                  render();
+                },
+              },
+              ["Back"]
+            ),
+            mk(
+              "button",
+              {
+                class: "btn",
+                disabled: !stepOk,
+                onClick: async () => {
+                  if (q?.type === "submit") {
+                    try {
+                      await submitPayload(vq);
+                    } catch (e) {
+                      console.error(e);
+                      alert("Submit failed. Please try again.");
+                    }
+                    return;
+                  }
+
+                  if (isLast) return;
+
+                  const next = vq[state.stepIndex + 1];
+
+                  // If next is a transient loading step, show it BETWEEN steps (not as a real step)
+                  if (next?.type === "loading_lookup" && next?.transient === true) {
+                    mount.innerHTML = "";
+
+                    const fillId = `loadfill_${next.id}`;
+                    const duration = Number(next.duration_ms || 1400);
+                    const start = Date.now();
+
+                    const transientCard = mk("div", { class: "card" }, [
+                      mk("div", { class: "stepHeader" }, [
+                        mk("div", { class: "progressWrap" }, [
+                          mk("div", { class: "progressMeta" }, [`Step ${state.stepIndex + 2} of ${vq.length}`]),
+                          mk("div", { class: "progressBar" }, [
+                            mk("div", { class: "progressFill", style: `width:${Math.round(((state.stepIndex + 2) / vq.length) * 100)}%` }),
+                          ]),
+                        ]),
+                        mk("h2", {}, [next.title || "Checking…"]),
+                        next.subtitle ? mk("div", { class: "stepSub" }, [next.subtitle]) : null,
+                      ]),
+                      mk("div", { class: "loading" }, [
+                        mk("div", { class: "loadingInner" }, [
+                          mk("div", { class: "spinner" }),
+                          mk("div", { class: "loadBar" }, [
+                            mk("div", { id: fillId, class: "loadFill", style: "width:0%" }),
+                          ]),
+                        ]),
+                      ]),
+                    ]);
+
+                    mount.appendChild(transientCard);
+
+                    // Always re-run
+                    delete state.answers[`__ran_${next.id}`];
+                    (next.writes || []).forEach((k) => delete state.answers[k]);
+
+                    const tick = () => {
+                      const el = document.getElementById(fillId);
+                      if (!el) return;
+                      const t = Math.min(1, (Date.now() - start) / duration);
+                      const eased = 1 - Math.pow(1 - t, 2);
+                      el.style.width = `${Math.min(92, Math.round(eased * 100))}%`;
+                      if (t < 1) requestAnimationFrame(tick);
+                    };
+                    requestAnimationFrame(tick);
+
+                    (async () => {
+                      try { await runLookup(state, next.lookup); }
+                      catch (e) { console.warn("Lookup failed:", e); state.answers.municipality_found = false; }
+
+                      const el = document.getElementById(fillId);
+                      if (el) el.style.width = "100%";
+
+                      const elapsed = Date.now() - start;
+                      const remaining = Math.max(0, duration - elapsed);
+
+                      setTimeout(() => {
+                        state.stepIndex = state.stepIndex + 2; // skip over loading step
+                        persist();
+                        render();
+                      }, remaining + 250);
+                    })();
+
+                    return;
+                  }
+
+                  state.stepIndex++;
+                  render();
+                },
+              },
+              [q?.next_label || (isLast ? (q?.submit_label || "Submit") : "Next")]
+            ),
+          ])
+        );
+
+        // --- Live Preview ---
+        container.appendChild(
+          mk("div", { class: "preview" }, [
+            mk("div", { class: "previewTop" }, [
+              mk("span", {}, [previewLabel]),
+              tooltip("Sample tooltip text. Click “?” to toggle. Style .tip / .tipBubble."),
+            ]),
+            mk("div", { class: "previewPrice" }, [previewValue]),
+            mk("div", { class: "previewSub" }, [previewSub]),
+          ])
+        );
+
+        mount.appendChild(container);
+      }
+
+      render();
+    } catch (e) {
+      const mount = document.getElementById(MOUNT_ID);
+      if (mount) mount.innerHTML = `<p>Error loading configuration. Check console.</p>`;
+      console.error(e);
+    }
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+})();
