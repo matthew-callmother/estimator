@@ -17,7 +17,6 @@
       else if (k === "html") el.innerHTML = v;
       else if (k.startsWith("on") && typeof v === "function") el.addEventListener(k.slice(2).toLowerCase(), v);
       else if (typeof v === "boolean") {
-        // boolean attrs must be set via property; attribute only present when true
         if (k in el) el[k] = v;
         if (v) el.setAttribute(k, "");
         else el.removeAttribute(k);
@@ -121,17 +120,14 @@
     price += Number(mods.access?.[acc] ?? 0);
     price += Number(mods.urgency?.[urg] ?? 0);
 
-    // venting only meaningful on gas (or fuel unknown)
     if (fuel === "gas" || fuel === "not_sure") {
       price += Number(mods.venting?.[vent] ?? 0);
     }
 
-    // fuel not sure padding
     if (fuel === "not_sure") {
       price += Number(mods.fuel_not_sure_penalty ?? 0);
     }
 
-    // municipality adds (populated by loading_lookup step)
     price += Number(answers.permit_fee_usd || 0);
 
     if (answers.expansion_tank_required === true) {
@@ -156,7 +152,6 @@
       .filter(([k]) => {
         const [kType, kFuel] = String(k).split("_");
         if (type && kType !== type) return false;
-        // if fuel is unknown, allow both gas/electric bases in the range
         if (fuel && fuel !== "not_sure" && kFuel !== fuel) return false;
         return true;
       })
@@ -185,12 +180,10 @@
     let min = baseMin;
     let max = baseMax;
 
-    // include common dims + venting if present
     const dims = ["location", "access", "urgency", "venting"];
     dims.forEach((dim) => {
       const qid = cfg?.pricing?.drivers?.[dim] || dim;
 
-      // venting only if fuel might be gas
       if (dim === "venting" && fuel && fuel !== "gas" && fuel !== "not_sure") return;
 
       if (idsInWizard.has(qid) || idsInWizard.has(dim)) {
@@ -200,7 +193,6 @@
       }
     });
 
-    // fuel-not-sure padding affects range
     if (fuel === "not_sure") {
       const pad = Number(mods.fuel_not_sure_penalty ?? 0);
       min += pad;
@@ -280,9 +272,6 @@
 
       const persist = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 
-      // transient/loading runner
-      const loadingRun = { id: null, timer: null };
-
       function visibleQuestions() {
         const all = cfg.questions || [];
         return all.filter((q) => {
@@ -293,7 +282,9 @@
       }
 
       function isTransientStep(step) {
-        return step?.transient === true || step?.type === "loading_lookup";
+        // Only treat as transient for BACK-skipping purposes.
+        // We do NOT auto-skip inside render.
+        return step?.transient === true;
       }
 
       function clearLookupState(vq) {
@@ -367,24 +358,10 @@
         const q = vq[state.stepIndex];
         const isLast = state.stepIndex === vq.length - 1;
 
-        // If we ever land on a transient step (e.g., via refresh/state), skip forward.
-        if (q && isTransientStep(q)) {
-          state.stepIndex = Math.min(state.stepIndex + 1, vq.length - 1);
-          render();
-          return;
-        }
-
-        // cancel any prior loading timer if we moved away
-        if (loadingRun.id && q?.id !== loadingRun.id && loadingRun.timer) {
-          clearTimeout(loadingRun.timer);
-          loadingRun.timer = null;
-          loadingRun.id = null;
-        }
-
-        // progress bar
+        // progress bar (main wizard)
         const pct = vq.length ? Math.round(((state.stepIndex + 1) / vq.length) * 100) : 0;
 
-        // pricing display: — until any pricing signal; range until pricing complete; exact after exact_requires
+        // pricing display
         const any = hasAnyPricingSignal(vq);
         const pricingDone = allPricingQuestionsComplete(vq);
         const exactAllowed = pricingDone && hasExactRequirements();
@@ -489,194 +466,3 @@
                 ])
               );
             }
-
-            if (qq.type === "form") {
-              (qq.fields || []).forEach((f) => {
-                const ans = state.answers[f.id];
-                if (isEmpty(ans)) return;
-                block.appendChild(
-                  mk("div", { class: "summaryRow" }, [
-                    mk("div", { class: "summaryK" }, [f.label || f.id]),
-                    mk("div", { class: "summaryV" }, [String(ans)]),
-                  ])
-                );
-              });
-            }
-          });
-
-          // municipality display if present
-          if (!isEmpty(state.answers.municipality_city)) {
-            block.appendChild(
-              mk("div", { class: "summaryRow" }, [
-                mk("div", { class: "summaryK" }, ["Municipality"]),
-                mk("div", { class: "summaryV" }, [String(state.answers.municipality_city)]),
-              ])
-            );
-          }
-          if (!isEmpty(state.answers.permit_fee_usd)) {
-            block.appendChild(
-              mk("div", { class: "summaryRow" }, [
-                mk("div", { class: "summaryK" }, ["Permit fee"]),
-                mk("div", { class: "summaryV" }, [`$${money(Number(state.answers.permit_fee_usd) || 0)}`]),
-              ])
-            );
-          }
-          if (state.answers.expansion_tank_required === true) {
-            block.appendChild(
-              mk("div", { class: "summaryRow" }, [
-                mk("div", { class: "summaryK" }, ["Expansion tank"]),
-                mk("div", { class: "summaryV" }, ["Required"]),
-              ])
-            );
-          }
-
-          content.appendChild(block);
-        } else if (q?.type === "submit") {
-          content.appendChild(mk("div", { class: "note" }, [q.note || "Submit your info to lock in this estimate."]));
-        } else {
-          content.appendChild(mk("div", { class: "note" }, ["Unsupported question type."]));
-        }
-
-        // --- Nav ---
-        const canGoBack = state.stepIndex > 0;
-        const stepOk = isQuestionComplete(q, state.answers);
-        const nextLabel = q?.next_label || (isLast ? (q?.submit_label || "Submit") : "Next");
-
-        container.appendChild(
-          mk("div", { class: "nav" }, [
-            mk(
-              "button",
-              {
-                class: "btn secondary",
-                disabled: !canGoBack,
-                onClick: () => {
-                  const prev = backIndexSkippingTransients(vq, state.stepIndex);
-                  // If we skipped over transient lookup steps, clear state so it re-runs on forward.
-                  if (prev < state.stepIndex - 1) clearLookupState(vq);
-                  state.stepIndex = prev;
-                  render();
-                },
-              },
-              ["Back"]
-            ),
-            mk(
-              "button",
-              {
-                class: "btn",
-                disabled: !stepOk,
-                onClick: async () => {
-                  if (q?.type === "submit") {
-                    try {
-                      await submitPayload(vq);
-                    } catch (e) {
-                      console.error(e);
-                      alert("Submit failed. Please try again.");
-                    }
-                    return;
-                  }
-                  if (!isLast) {
-                    // if next step is loading_lookup, run it "between" steps (transient)
-                    const next = vq[state.stepIndex + 1];
-                    if (next?.type === "loading_lookup") {
-                      // Render a transient loading screen with animation + progress,
-                      // run lookup, then advance to the next non-transient step.
-                      mount.innerHTML = "";
-                      const fillId = `loadfill_${next.id}`;
-
-                      const transientCard = mk("div", { class: "card" }, [
-                        mk("div", { class: "stepHeader" }, [
-                          mk("div", { class: "progressWrap" }, [
-                            mk("div", { class: "progressMeta" }, [`Step ${state.stepIndex + 2} of ${vq.length}`]),
-                            mk("div", { class: "progressBar" }, [
-                              mk("div", { class: "progressFill", style: `width:${Math.round(((state.stepIndex + 2) / vq.length) * 100)}%` }),
-                            ]),
-                          ]),
-                          mk("h2", {}, [next.title || "Checking…"]),
-                          next.subtitle ? mk("div", { class: "stepSub" }, [next.subtitle]) : null,
-                        ]),
-                        mk("div", { class: "loading" }, [
-                          mk("div", { class: "loadingInner" }, [
-                            mk("div", { class: "spinner" }),
-                            mk("div", { class: "loadBar" }, [
-                              mk("div", { id: fillId, class: "loadFill", style: "width:0%" }),
-                            ]),
-                          ]),
-                        ]),
-                      ]);
-
-                      mount.appendChild(transientCard);
-
-                      // clear old run flag + written outputs so it always re-queries
-                      delete state.answers[`__ran_${next.id}`];
-                      (next.writes || []).forEach((k) => delete state.answers[k]);
-
-                      const duration = Number(next.duration_ms || 1400);
-                      const start = Date.now();
-
-                      const tick = () => {
-                        const el = document.getElementById(fillId);
-                        if (!el) return;
-                        const t = Math.min(1, (Date.now() - start) / duration);
-                        const eased = 1 - Math.pow(1 - t, 2);
-                        el.style.width = `${Math.min(92, Math.round(eased * 100))}%`;
-                        if (t < 1) requestAnimationFrame(tick);
-                      };
-                      requestAnimationFrame(tick);
-
-                      (async () => {
-                        try {
-                          await runLookup(state, next.lookup);
-                        } catch (e) {
-                          console.warn("Lookup failed:", e);
-                          state.answers.municipality_found = false;
-                        }
-
-                        const el = document.getElementById(fillId);
-                        if (el) el.style.width = "100%";
-
-                        setTimeout(() => {
-                          state.stepIndex = state.stepIndex + 2; // skip over loading step
-                          persist();
-                          render();
-                        }, 250);
-                      })();
-
-                      return;
-                    }
-
-                    state.stepIndex++;
-                    render();
-                  }
-                },
-              },
-              [nextLabel]
-            ),
-          ])
-        );
-
-        // --- Live Preview ---
-        container.appendChild(
-          mk("div", { class: "preview" }, [
-            mk("div", { class: "previewTop" }, [
-              mk("span", {}, [previewLabel]),
-              tooltip("Sample tooltip text. Click “?” to toggle. Style .tip / .tipBubble."),
-            ]),
-            mk("div", { class: "previewPrice" }, [previewValue]),
-            mk("div", { class: "previewSub" }, [previewSub]),
-          ])
-        );
-
-        mount.appendChild(container);
-      }
-
-      render();
-    } catch (e) {
-      const mount = document.getElementById(MOUNT_ID);
-      if (mount) mount.innerHTML = `<p>Error loading configuration. Check console.</p>`;
-      console.error(e);
-    }
-  }
-
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
-  else boot();
-})();
