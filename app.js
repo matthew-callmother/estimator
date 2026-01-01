@@ -32,7 +32,7 @@
   };
 
   const qs = (sel, root = document) => root.querySelector(sel);
-  const money = (n) => Math.round(n).toLocaleString();
+  const money = (n) => Math.round(Number(n) || 0).toLocaleString();
   const normalizePhone = (s) => String(s || "").replace(/\D/g, "");
   const isEmpty = (v) => v === null || v === undefined || String(v).trim() === "";
 
@@ -128,6 +128,7 @@
       price += Number(mods.fuel_not_sure_penalty ?? 0);
     }
 
+    // municipality adjustments (populated by lookup)
     price += Number(answers.permit_fee_usd || 0);
 
     if (answers.expansion_tank_required === true) {
@@ -158,10 +159,10 @@
       .map(([, v]) => Number(v))
       .filter((v) => Number.isFinite(v));
 
-    const baseMin = baseCandidates.length ? Math.min(...baseCandidates) : 0;
-    const baseMax = baseCandidates.length ? Math.max(...baseCandidates) : 0;
+    let min = baseCandidates.length ? Math.min(...baseCandidates) : 0;
+    let max = baseCandidates.length ? Math.max(...baseCandidates) : 0;
 
-    const idsInWizard = new Set((pricingQuestions || []).map((q) => q.id).filter(Boolean));
+    const ids = new Set((pricingQuestions || []).map((q) => q.id).filter(Boolean));
 
     const dimRange = (dimKey) => {
       const m = mods?.[dimKey] || {};
@@ -177,21 +178,18 @@
       return { min: Math.min(...vals), max: Math.max(...vals) };
     };
 
-    let min = baseMin;
-    let max = baseMax;
-
     const dims = ["location", "access", "urgency", "venting"];
-    dims.forEach((dim) => {
+    for (const dim of dims) {
       const qid = cfg?.pricing?.drivers?.[dim] || dim;
 
-      if (dim === "venting" && fuel && fuel !== "gas" && fuel !== "not_sure") return;
+      if (dim === "venting" && fuel && fuel !== "gas" && fuel !== "not_sure") continue;
 
-      if (idsInWizard.has(qid) || idsInWizard.has(dim)) {
+      if (ids.has(qid) || ids.has(dim)) {
         const r = dimRange(dim);
         min += r.min;
         max += r.max;
       }
-    });
+    }
 
     if (fuel === "not_sure") {
       const pad = Number(mods.fuel_not_sure_penalty ?? 0);
@@ -240,18 +238,14 @@
     if (q.type === "single_select") return !isEmpty(answers[q.id]);
 
     if (q.type === "form") {
-      const fields = q.fields || [];
-      for (const f of fields) {
+      for (const f of (q.fields || [])) {
         const r = validateField(f, answers[f.id]);
         if (!r.ok) return false;
       }
       return true;
     }
 
-    if (q.type === "loading_lookup") return true;
-    if (q.type === "summary" || q.type === "content") return true;
-    if (q.type === "submit") return true;
-
+    if (q.type === "content" || q.type === "summary" || q.type === "submit" || q.type === "loading_lookup") return true;
     return true;
   }
 
@@ -282,19 +276,16 @@
       }
 
       function isTransientStep(step) {
-        // Only treat as transient for BACK-skipping purposes.
-        // We do NOT auto-skip inside render.
         return step?.transient === true;
       }
 
       function clearLookupState(vq) {
-        (vq || []).forEach((step) => {
+        for (const step of (vq || [])) {
           if (step?.type === "loading_lookup") {
             delete state.answers[`__ran_${step.id}`];
-            const writes = step.writes || [];
-            writes.forEach((k) => delete state.answers[k]);
+            for (const k of (step.writes || [])) delete state.answers[k];
           }
-        });
+        }
       }
 
       function backIndexSkippingTransients(vq, fromIndex) {
@@ -352,16 +343,13 @@
         mount.innerHTML = "";
 
         const vq = visibleQuestions();
-        if (state.stepIndex < 0) state.stepIndex = 0;
-        if (state.stepIndex > vq.length - 1) state.stepIndex = vq.length - 1;
+        state.stepIndex = Math.max(0, Math.min(state.stepIndex, vq.length - 1));
 
         const q = vq[state.stepIndex];
         const isLast = state.stepIndex === vq.length - 1;
 
-        // progress bar (main wizard)
         const pct = vq.length ? Math.round(((state.stepIndex + 1) / vq.length) * 100) : 0;
 
-        // pricing display
         const any = hasAnyPricingSignal(vq);
         const pricingDone = allPricingQuestionsComplete(vq);
         const exactAllowed = pricingDone && hasExactRequirements();
@@ -389,7 +377,9 @@
           mk("div", { class: "stepHeader" }, [
             mk("div", { class: "progressWrap" }, [
               mk("div", { class: "progressMeta" }, [`Step ${state.stepIndex + 1} of ${vq.length}`]),
-              mk("div", { class: "progressBar" }, [mk("div", { class: "progressFill", style: `width:${pct}%` })]),
+              mk("div", { class: "progressBar" }, [
+                mk("div", { class: "progressFill", style: `width:${pct}%` }),
+              ]),
             ]),
             mk("h2", {}, [q?.title || ""]),
             q?.subtitle ? mk("div", { class: "stepSub" }, [q.subtitle]) : null,
@@ -399,33 +389,28 @@
 
         const content = qs("#step-content", container);
 
-        // --- Render by type ---
+        // ---- render question ----
         if (q?.type === "single_select") {
-          (q.options || []).forEach((opt) => {
+          for (const opt of (q.options || [])) {
             const active = String(state.answers[q.id]) === String(opt.value);
             content.appendChild(
-              mk(
-                "div",
-                {
-                  class: `choice ${active ? "active" : ""}`,
-                  onClick: () => {
-                    state.answers[q.id] = String(opt.value);
-                    render();
-                  },
+              mk("div", {
+                class: `choice ${active ? "active" : ""}`,
+                onClick: () => {
+                  state.answers[q.id] = String(opt.value);
+                  render();
                 },
-                [
-                  mk("div", { class: "choiceMain" }, [
-                    mk("span", { class: "choiceLabel" }, [opt.label]),
-                    opt.tooltip ? tooltip(opt.tooltip) : null,
-                    opt.image_url ? mk("img", { class: "oimg", src: opt.image_url, alt: "" }) : null,
-                  ]),
-                ]
-              )
+              }, [
+                mk("div", { class: "choiceMain" }, [
+                  mk("span", { class: "choiceLabel" }, [opt.label]),
+                  opt.tooltip ? tooltip(opt.tooltip) : null,
+                  opt.image_url ? mk("img", { class: "oimg", src: opt.image_url, alt: "" }) : null,
+                ]),
+              ])
             );
-          });
+          }
         } else if (q?.type === "form") {
-          const fields = q.fields || [];
-          fields.forEach((f) => {
+          for (const f of (q.fields || [])) {
             const val = state.answers[f.id] || "";
             const result = validateField(f, val);
 
@@ -437,27 +422,24 @@
                   value: val,
                   placeholder: f.placeholder || "",
                   autocomplete: f.autocomplete || "",
-                  onInput: (e) => {
-                    state.answers[f.id] = e.target.value;
-                  },
+                  onInput: (e) => { state.answers[f.id] = e.target.value; },
                   onBlur: () => render(),
                 }),
-                !result.ok && !isEmpty(val) ? mk("div", { class: "fieldErr" }, [result.msg]) : null,
+                (!result.ok && !isEmpty(val)) ? mk("div", { class: "fieldErr" }, [result.msg]) : null,
               ])
             );
-          });
+          }
         } else if (q?.type === "content") {
           content.appendChild(mk("div", { class: "contentBlock", html: q.html || "" }));
         } else if (q?.type === "summary") {
           const block = mk("div", { class: "summary" });
 
-          (vq || []).forEach((qq) => {
-            if (qq.type === "submit") return;
-            if (qq.type === "summary" || qq.type === "content" || qq.type === "loading_lookup") return;
+          for (const qq of (vq || [])) {
+            if (qq.type === "submit" || qq.type === "summary" || qq.type === "content" || qq.type === "loading_lookup") continue;
 
             if (qq.type === "single_select") {
               const ans = state.answers[qq.id];
-              if (isEmpty(ans)) return;
+              if (isEmpty(ans)) continue;
               const opt = (qq.options || []).find((o) => String(o.value) === String(ans));
               block.appendChild(
                 mk("div", { class: "summaryRow" }, [
@@ -465,21 +447,19 @@
                   mk("div", { class: "summaryV" }, [opt ? opt.label : String(ans)]),
                 ])
               );
-            }
-
-            if (qq.type === "form") {
-              (qq.fields || []).forEach((f) => {
+            } else if (qq.type === "form") {
+              for (const f of (qq.fields || [])) {
                 const ans = state.answers[f.id];
-                if (isEmpty(ans)) return;
+                if (isEmpty(ans)) continue;
                 block.appendChild(
                   mk("div", { class: "summaryRow" }, [
                     mk("div", { class: "summaryK" }, [f.label || f.id]),
                     mk("div", { class: "summaryV" }, [String(ans)]),
                   ])
                 );
-              });
+              }
             }
-          });
+          }
 
           if (!isEmpty(state.answers.municipality_city)) {
             block.appendChild(
@@ -489,14 +469,16 @@
               ])
             );
           }
+
           if (!isEmpty(state.answers.permit_fee_usd)) {
             block.appendChild(
               mk("div", { class: "summaryRow" }, [
                 mk("div", { class: "summaryK" }, ["Permit fee"]),
-                mk("div", { class: "summaryV" }, [`$${money(Number(state.answers.permit_fee_usd) || 0)}`]),
+                mk("div", { class: "summaryV" }, [`$${money(state.answers.permit_fee_usd)}`]),
               ])
             );
           }
+
           if (state.answers.expansion_tank_required === true) {
             block.appendChild(
               mk("div", { class: "summaryRow" }, [
@@ -509,176 +491,118 @@
           content.appendChild(block);
         } else if (q?.type === "submit") {
           content.appendChild(mk("div", { class: "note" }, [q.note || "Submit your info to lock in this estimate."]));
-        } else if (q?.type === "loading_lookup") {
-          // If you ever include a loading_lookup in the visible wizard, render it properly.
-          const fillId = `loadfill_${q.id}`;
-          content.appendChild(
-            mk("div", { class: "loading" }, [
-              mk("div", { class: "loadingInner" }, [
-                mk("div", { class: "spinner" }),
-                mk("div", { class: "loadingTitle" }, [q.title || "Checking…"]),
-                mk("div", { class: "loadingSub" }, [q.subtitle || ""]),
-                mk("div", { class: "loadBar" }, [
-                  mk("div", { id: fillId, class: "loadFill", style: "width:0%" })
-                ])
-              ])
-            ])
-          );
-
-          const ranKey = `__ran_${q.id}`;
-          if (!state.answers[ranKey]) {
-            state.answers[ranKey] = "1";
-
-            const duration = Number(q.duration_ms || 1400);
-            const start = Date.now();
-
-            const tick = () => {
-              const el = document.getElementById(fillId);
-              if (!el) return;
-              const t = Math.min(1, (Date.now() - start) / duration);
-              const eased = 1 - Math.pow(1 - t, 2);
-              el.style.width = `${Math.min(92, Math.round(eased * 100))}%`;
-              if (t < 1) requestAnimationFrame(tick);
-            };
-            requestAnimationFrame(tick);
-
-            (async () => {
-              try { await runLookup(state, q.lookup); }
-              catch (e) { console.warn("Lookup failed:", e); state.answers.municipality_found = false; }
-
-              const el = document.getElementById(fillId);
-              if (el) el.style.width = "100%";
-
-              const elapsed = Date.now() - start;
-              const remaining = Math.max(0, duration - elapsed);
-
-              setTimeout(() => {
-                if (q.auto_advance !== false) {
-                  state.stepIndex++;
-                  render();
-                }
-              }, remaining + 250);
-            })();
-          }
         } else {
           content.appendChild(mk("div", { class: "note" }, ["Unsupported question type."]));
         }
 
-        // --- Nav ---
+        // ---- nav ----
         const canGoBack = state.stepIndex > 0;
         const stepOk = isQuestionComplete(q, state.answers);
+        const nextLabel = q?.next_label || (isLast ? (q?.submit_label || "Submit") : "Next");
 
         container.appendChild(
           mk("div", { class: "nav" }, [
-            mk(
-              "button",
-              {
-                class: "btn secondary",
-                disabled: !canGoBack,
-                onClick: () => {
-                  const prev = backIndexSkippingTransients(vq, state.stepIndex);
-                  if (prev < state.stepIndex - 1) clearLookupState(vq); // re-query on forward
-                  state.stepIndex = prev;
-                  render();
-                },
+            mk("button", {
+              class: "btn secondary",
+              disabled: !canGoBack,
+              onClick: () => {
+                const prev = backIndexSkippingTransients(vq, state.stepIndex);
+                if (prev < state.stepIndex - 1) clearLookupState(vq);
+                state.stepIndex = prev;
+                render();
               },
-              ["Back"]
-            ),
-            mk(
-              "button",
-              {
-                class: "btn",
-                disabled: !stepOk,
-                onClick: async () => {
-                  if (q?.type === "submit") {
-                    try {
-                      await submitPayload(vq);
-                    } catch (e) {
-                      console.error(e);
-                      alert("Submit failed. Please try again.");
-                    }
-                    return;
-                  }
+            }, ["Back"]),
 
-                  if (isLast) return;
+            mk("button", {
+              class: "btn",
+              disabled: !stepOk,
+              onClick: async () => {
+                if (q?.type === "submit") {
+                  try { await submitPayload(vq); }
+                  catch (e) { console.error(e); alert("Submit failed. Please try again."); }
+                  return;
+                }
 
-                  const next = vq[state.stepIndex + 1];
+                if (isLast) return;
 
-                  // If next is a transient loading step, show it BETWEEN steps (not as a real step)
-                  if (next?.type === "loading_lookup" && next?.transient === true) {
-                    mount.innerHTML = "";
+                const next = vq[state.stepIndex + 1];
 
-                    const fillId = `loadfill_${next.id}`;
-                    const duration = Number(next.duration_ms || 1400);
-                    const start = Date.now();
+                // transient loading_lookup runs BETWEEN steps (never becomes a "back" destination)
+                if (next?.type === "loading_lookup" && next?.transient === true) {
+                  mount.innerHTML = "";
 
-                    const transientCard = mk("div", { class: "card" }, [
-                      mk("div", { class: "stepHeader" }, [
-                        mk("div", { class: "progressWrap" }, [
-                          mk("div", { class: "progressMeta" }, [`Step ${state.stepIndex + 2} of ${vq.length}`]),
-                          mk("div", { class: "progressBar" }, [
-                            mk("div", { class: "progressFill", style: `width:${Math.round(((state.stepIndex + 2) / vq.length) * 100)}%` }),
-                          ]),
-                        ]),
-                        mk("h2", {}, [next.title || "Checking…"]),
-                        next.subtitle ? mk("div", { class: "stepSub" }, [next.subtitle]) : null,
-                      ]),
-                      mk("div", { class: "loading" }, [
-                        mk("div", { class: "loadingInner" }, [
-                          mk("div", { class: "spinner" }),
-                          mk("div", { class: "loadBar" }, [
-                            mk("div", { id: fillId, class: "loadFill", style: "width:0%" }),
-                          ]),
+                  const duration = Number(next.duration_ms || 1400);
+                  const start = Date.now();
+                  const fillId = `loadfill_${next.id}`;
+
+                  const card = mk("div", { class: "card" }, [
+                    mk("div", { class: "stepHeader" }, [
+                      mk("div", { class: "progressWrap" }, [
+                        mk("div", { class: "progressMeta" }, [`Step ${state.stepIndex + 2} of ${vq.length}`]),
+                        mk("div", { class: "progressBar" }, [
+                          mk("div", {
+                            class: "progressFill",
+                            style: `width:${Math.round(((state.stepIndex + 2) / vq.length) * 100)}%`,
+                          }),
                         ]),
                       ]),
-                    ]);
+                      mk("h2", {}, [next.title || "Checking…"]),
+                      next.subtitle ? mk("div", { class: "stepSub" }, [next.subtitle]) : null,
+                    ]),
+                    mk("div", { class: "loading" }, [
+                      mk("div", { class: "loadingInner" }, [
+                        mk("div", { class: "spinner" }),
+                        mk("div", { class: "loadBar" }, [
+                          mk("div", { id: fillId, class: "loadFill", style: "width:0%" }),
+                        ]),
+                      ]),
+                    ]),
+                  ]);
 
-                    mount.appendChild(transientCard);
+                  mount.appendChild(card);
 
-                    // Always re-run
-                    delete state.answers[`__ran_${next.id}`];
-                    (next.writes || []).forEach((k) => delete state.answers[k]);
+                  // force requery each time user goes forward from address
+                  delete state.answers[`__ran_${next.id}`];
+                  for (const k of (next.writes || [])) delete state.answers[k];
 
-                    const tick = () => {
-                      const el = document.getElementById(fillId);
-                      if (!el) return;
-                      const t = Math.min(1, (Date.now() - start) / duration);
-                      const eased = 1 - Math.pow(1 - t, 2);
-                      el.style.width = `${Math.min(92, Math.round(eased * 100))}%`;
-                      if (t < 1) requestAnimationFrame(tick);
-                    };
-                    requestAnimationFrame(tick);
+                  const tick = () => {
+                    const el = document.getElementById(fillId);
+                    if (!el) return;
+                    const t = Math.min(1, (Date.now() - start) / duration);
+                    const eased = 1 - Math.pow(1 - t, 2);
+                    el.style.width = `${Math.min(92, Math.round(eased * 100))}%`;
+                    if (t < 1) requestAnimationFrame(tick);
+                  };
+                  requestAnimationFrame(tick);
 
-                    (async () => {
-                      try { await runLookup(state, next.lookup); }
-                      catch (e) { console.warn("Lookup failed:", e); state.answers.municipality_found = false; }
+                  (async () => {
+                    try { await runLookup(state, next.lookup); }
+                    catch (e) { console.warn("Lookup failed:", e); state.answers.municipality_found = false; }
 
-                      const el = document.getElementById(fillId);
-                      if (el) el.style.width = "100%";
+                    const el = document.getElementById(fillId);
+                    if (el) el.style.width = "100%";
 
-                      const elapsed = Date.now() - start;
-                      const remaining = Math.max(0, duration - elapsed);
+                    const elapsed = Date.now() - start;
+                    const remaining = Math.max(0, duration - elapsed);
 
-                      setTimeout(() => {
-                        state.stepIndex = state.stepIndex + 2; // skip over loading step
-                        persist();
-                        render();
-                      }, remaining + 250);
-                    })();
+                    setTimeout(() => {
+                      state.stepIndex = state.stepIndex + 2; // skip over transient step
+                      persist();
+                      render();
+                    }, remaining + 250);
+                  })();
 
-                    return;
-                  }
+                  return;
+                }
 
-                  state.stepIndex++;
-                  render();
-                },
+                state.stepIndex++;
+                render();
               },
-              [q?.next_label || (isLast ? (q?.submit_label || "Submit") : "Next")]
-            ),
+            }, [nextLabel]),
           ])
         );
 
-        // --- Live Preview ---
+        // ---- preview ----
         container.appendChild(
           mk("div", { class: "preview" }, [
             mk("div", { class: "previewTop" }, [
