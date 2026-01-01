@@ -3,43 +3,40 @@
 
   const ZAPIER_WEBHOOK_URL = "PASTE_YOUR_ZAPIER_CATCH_HOOK_URL_HERE";
   const CONFIG_URL = "https://matthew-callmother.github.io/estimator/config.json";
+  const MUNICIPALITIES_URL = "https://matthew-callmother.github.io/estimator/municipalities-dfw.json";
+
   const MOUNT_ID = "wh-estimator";
   const STORAGE_KEY = "wh_estimator_v2_state";
 
   // ---------- Helpers ----------
   const mk = (tag, attrs = {}, children = []) => {
-  const el = document.createElement(tag);
+    const el = document.createElement(tag);
 
-  for (const [k, v] of Object.entries(attrs || {})) {
-    if (k === "class") {
-      el.className = v;
-    } else if (k === "html") {
-      el.innerHTML = v;
-    } else if (k.startsWith("on") && typeof v === "function") {
-      el.addEventListener(k.slice(2).toLowerCase(), v);
-    } else if (typeof v === "boolean") {
-      // IMPORTANT: boolean attributes must be set via property (and only present when true)
-      if (k in el) el[k] = v;
-      if (v) el.setAttribute(k, "");
-      else el.removeAttribute(k);
-    } else if (v !== null && v !== undefined) {
-      el.setAttribute(k, String(v));
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (k === "class") el.className = v;
+      else if (k === "html") el.innerHTML = v;
+      else if (k.startsWith("on") && typeof v === "function") el.addEventListener(k.slice(2).toLowerCase(), v);
+      else if (typeof v === "boolean") {
+        if (k in el) el[k] = v;
+        if (v) el.setAttribute(k, "");
+        else el.removeAttribute(k);
+      } else if (v !== null && v !== undefined) {
+        el.setAttribute(k, String(v));
+      }
     }
-  }
 
-  for (const c of children) {
-    if (c) el.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
-  }
-  return el;
-};
-
+    for (const c of children) {
+      if (c) el.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+    }
+    return el;
+  };
 
   const qs = (sel, root = document) => root.querySelector(sel);
   const money = (n) => Math.round(n).toLocaleString();
   const normalizePhone = (s) => String(s || "").replace(/\D/g, "");
   const isEmpty = (v) => v === null || v === undefined || String(v).trim() === "";
 
-  // ---------- Tooltip (sample, tweak via CSS) ----------
+  // ---------- Tooltip ----------
   function tooltip(text) {
     if (!text) return null;
     const tip = mk("span", { class: "tip" }, ["?"]);
@@ -56,6 +53,45 @@
     return wrap;
   }
 
+  // ---------- Municipality lookup ----------
+  let MUNICACHE = null;
+
+  async function loadMunicipalities() {
+    if (MUNICACHE) return MUNICACHE;
+    const res = await fetch(MUNICIPALITIES_URL, { cache: "no-store" });
+    MUNICACHE = await res.json();
+    return MUNICACHE;
+  }
+
+  function normalizeCityName(raw, muni) {
+    const s = String(raw || "").trim();
+    if (!s) return "";
+    const aliased = muni?.aliases?.[s] || s;
+    return aliased.replace(/,\s*TX$/i, "").trim();
+  }
+
+  async function runLookup(cfg, state, lookupSpec) {
+    if (!lookupSpec) return;
+
+    if (lookupSpec.source === "municipalities") {
+      const muni = await loadMunicipalities();
+      const matchField = lookupSpec.match_on || "addr_city";
+      const cityRaw = state.answers[matchField];
+      const city = normalizeCityName(cityRaw, muni);
+
+      const row = muni?.cities?.[city] || null;
+      const mapping = lookupSpec.write_to || {};
+
+      for (const [rowKey, answerKey] of Object.entries(mapping)) {
+        state.answers[answerKey] = row ? row[rowKey] : null;
+      }
+
+      // helpful metadata (optional)
+      state.answers.municipality_city = row ? city : (city || null);
+      state.answers.municipality_found = !!row;
+    }
+  }
+
   // ---------- Pricing ----------
   function getDriverAnswer(cfg, answers, driverKey, fallbackId) {
     const drivers = cfg?.pricing?.drivers || {};
@@ -66,6 +102,7 @@
   function computePrice(cfg, answers) {
     const p = cfg.pricing || {};
     const base = p.base_price || {};
+    const mods = p.modifiers || {};
 
     const type = getDriverAnswer(cfg, answers, "type", "type") || "tank";
     const fuel = getDriverAnswer(cfg, answers, "fuel", "fuel") || "gas";
@@ -75,14 +112,31 @@
 
     let price = Number(base[key] || 0);
 
-    const mods = p.modifiers || {};
     const loc = getDriverAnswer(cfg, answers, "location", "location");
     const acc = getDriverAnswer(cfg, answers, "access", "access");
     const urg = getDriverAnswer(cfg, answers, "urgency", "urgency");
+    const vent = getDriverAnswer(cfg, answers, "venting", "venting");
 
     price += Number(mods.location?.[loc] ?? 0);
     price += Number(mods.access?.[acc] ?? 0);
     price += Number(mods.urgency?.[urg] ?? 0);
+
+    // venting only meaningful on gas (or fuel unknown)
+    if (fuel === "gas" || fuel === "not_sure") {
+      price += Number(mods.venting?.[vent] ?? 0);
+    }
+
+    // fuel not sure padding
+    if (fuel === "not_sure") {
+      price += Number(mods.fuel_not_sure_penalty ?? 0);
+    }
+
+    // municipality adds (exact step will populate these)
+    price += Number(answers.permit_fee_usd || 0);
+
+    if (answers.expansion_tank_required === true) {
+      price += Number(mods.expansion_tank_cost_usd ?? 0);
+    }
 
     const roundTo = p.safety?.round_to || 25;
     price = Math.round(price / roundTo) * roundTo;
@@ -102,7 +156,7 @@
       .filter(([k]) => {
         const [kType, kFuel] = String(k).split("_");
         if (type && kType !== type) return false;
-        if (fuel && kFuel !== fuel) return false;
+        if (fuel && (fuel !== "not_sure") && kFuel !== fuel) return false;
         return true;
       })
       .map(([, v]) => Number(v))
@@ -130,15 +184,28 @@
     let min = baseMin;
     let max = baseMax;
 
-    ["location", "access", "urgency"].forEach((dim) => {
+    // include common pricing dims + venting if present
+    const dims = ["location", "access", "urgency", "venting"];
+
+    dims.forEach((dim) => {
       const qid = cfg?.pricing?.drivers?.[dim] || dim;
-      // only consider dims that appear as wizard questions (so range doesn’t blow up unexpectedly)
+
+      // venting only when fuel could be gas
+      if (dim === "venting" && fuel && fuel !== "gas" && fuel !== "not_sure") return;
+
       if (driverIdsInWizard.has(qid) || driverIdsInWizard.has(dim)) {
         const r = dimRange(dim);
         min += r.min;
         max += r.max;
       }
     });
+
+    // fuel-not-sure padding affects range
+    if (fuel === "not_sure") {
+      const pad = Number(mods.fuel_not_sure_penalty ?? 0);
+      min += pad;
+      max += pad;
+    }
 
     const roundTo = p.safety?.round_to || 25;
     min = Math.round(min / roundTo) * roundTo;
@@ -158,7 +225,6 @@
     }
 
     if (!isEmpty(v) && field.type === "email") {
-      // simple check
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return { ok: false, msg: "Enter a valid email" };
     }
 
@@ -166,9 +232,7 @@
       try {
         const re = new RegExp(field.pattern);
         if (!re.test(v)) return { ok: false, msg: field.pattern_msg || "Invalid format" };
-      } catch (_) {
-        // ignore bad pattern
-      }
+      } catch (_) {}
     }
 
     if (!isEmpty(v) && field.min_len && v.trim().length < field.min_len) {
@@ -181,9 +245,7 @@
   function isQuestionComplete(q, answers) {
     if (!q) return true;
 
-    if (q.type === "single_select") {
-      return !isEmpty(answers[q.id]);
-    }
+    if (q.type === "single_select") return !isEmpty(answers[q.id]);
 
     if (q.type === "form") {
       const fields = q.fields || [];
@@ -194,13 +256,13 @@
       return true;
     }
 
-    if (q.type === "summary" || q.type === "content") return true;
-
-    if (q.type === "submit") {
-      // typically submit is enabled if all required fields in wizard are done;
-      // we still treat submit step itself as complete
+    if (q.type === "loading_lookup") {
+      // allow it; we’ll auto-advance
       return true;
     }
+
+    if (q.type === "summary" || q.type === "content") return true;
+    if (q.type === "submit") return true;
 
     return true;
   }
@@ -222,6 +284,9 @@
 
       const persist = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 
+      // loading-step runner state
+      const loadingRun = { id: null, timer: null };
+
       function visibleQuestions() {
         const all = cfg.questions || [];
         return all.filter((q) => {
@@ -238,7 +303,6 @@
 
       function hasAnyPricingSignal(vq) {
         const pricingQs = (vq || []).filter((q) => q.affects_pricing !== false);
-        // “don’t start with any amount”
         return pricingQs.some((q) => {
           if (q.type === "single_select") return !isEmpty(state.answers[q.id]);
           if (q.type === "form") return (q.fields || []).some((f) => !isEmpty(state.answers[f.id]));
@@ -287,6 +351,13 @@
         const q = vq[state.stepIndex];
         const isLast = state.stepIndex === vq.length - 1;
 
+        // cancel any previous loading timer if we’re not on that step anymore
+        if (loadingRun.id && q?.id !== loadingRun.id && loadingRun.timer) {
+          clearTimeout(loadingRun.timer);
+          loadingRun.timer = null;
+          loadingRun.id = null;
+        }
+
         // progress bar
         const pct = vq.length ? Math.round(((state.stepIndex + 1) / vq.length) * 100) : 0;
 
@@ -312,7 +383,7 @@
         if (any && exactAllowed) {
           previewLabel = "Exact Total";
           previewValue = `$${money(exact.display_price)}`;
-          previewSub = "Based on your answers.";
+          previewSub = "Based on your answers + municipality rules.";
         }
 
         const container = mk("div", { class: "card" }, [
@@ -361,10 +432,7 @@
 
             content.appendChild(
               mk("div", { class: "field" }, [
-                mk("label", { class: "fieldLabel" }, [
-                  f.label || f.id,
-                  f.help ? tooltip(f.help) : null,
-                ]),
+                mk("label", { class: "fieldLabel" }, [f.label || f.id, f.help ? tooltip(f.help) : null]),
                 mk("input", {
                   type: f.input_type || "text",
                   value: val,
@@ -375,17 +443,55 @@
                   },
                   onBlur: () => render(),
                 }),
-                (!result.ok && !isEmpty(val)) ? mk("div", { class: "fieldErr" }, [result.msg]) : null,
+                !result.ok && !isEmpty(val) ? mk("div", { class: "fieldErr" }, [result.msg]) : null,
               ])
             );
           });
+        } else if (q?.type === "loading_lookup") {
+          // spinner UI
+          content.appendChild(
+            mk("div", { class: "loading" }, [
+              mk("div", { class: "spinner" }),
+              mk("div", { class: "loadingTitle" }, [q.title || "Checking…"]),
+              mk("div", { class: "loadingSub" }, [q.subtitle || ""]),
+            ])
+          );
+
+          // run once per entry
+          const ranKey = `__ran_${q.id}`;
+          if (!state.answers[ranKey]) {
+            state.answers[ranKey] = "1";
+            loadingRun.id = q.id;
+
+            (async () => {
+              try {
+                await runLookup(cfg, state, q.lookup);
+              } catch (e) {
+                console.warn("Lookup failed:", e);
+                state.answers.municipality_found = false;
+              }
+
+              const ms = Number(q.duration_ms || 1400);
+              if (loadingRun.timer) clearTimeout(loadingRun.timer);
+
+              loadingRun.timer = setTimeout(() => {
+                // auto-advance (but keep Back usable)
+                loadingRun.timer = null;
+                if (q.auto_advance !== false) {
+                  state.stepIndex++;
+                  render();
+                }
+              }, ms);
+            })();
+          }
         } else if (q?.type === "content") {
           content.appendChild(mk("div", { class: "contentBlock", html: q.html || "" }));
         } else if (q?.type === "summary") {
           const block = mk("div", { class: "summary" });
+
           (vq || []).forEach((qq) => {
             if (qq.type === "submit") return;
-            if (qq.type === "summary" || qq.type === "content") return;
+            if (qq.type === "summary" || qq.type === "content" || qq.type === "loading_lookup") return;
 
             if (qq.type === "single_select") {
               const ans = state.answers[qq.id];
@@ -413,13 +519,35 @@
             }
           });
 
+          // show municipality results if present
+          if (!isEmpty(state.answers.municipality_city)) {
+            block.appendChild(
+              mk("div", { class: "summaryRow" }, [
+                mk("div", { class: "summaryK" }, ["Municipality"]),
+                mk("div", { class: "summaryV" }, [String(state.answers.municipality_city)]),
+              ])
+            );
+          }
+          if (!isEmpty(state.answers.permit_fee_usd)) {
+            block.appendChild(
+              mk("div", { class: "summaryRow" }, [
+                mk("div", { class: "summaryK" }, ["Permit fee"]),
+                mk("div", { class: "summaryV" }, [`$${money(Number(state.answers.permit_fee_usd) || 0)}`]),
+              ])
+            );
+          }
+          if (state.answers.expansion_tank_required === true) {
+            block.appendChild(
+              mk("div", { class: "summaryRow" }, [
+                mk("div", { class: "summaryK" }, ["Expansion tank"]),
+                mk("div", { class: "summaryV" }, ["Required"]),
+              ])
+            );
+          }
+
           content.appendChild(block);
         } else if (q?.type === "submit") {
-          content.appendChild(
-            mk("div", { class: "note" }, [
-              q.note || "Submit your info to lock in this estimate for 72 hours.",
-            ])
-          );
+          content.appendChild(mk("div", { class: "note" }, [q.note || "Submit your info to lock in this estimate."]));
         } else {
           content.appendChild(mk("div", { class: "note" }, ["Unsupported question type."]));
         }
@@ -428,6 +556,9 @@
         const canGoBack = state.stepIndex > 0;
         const stepOk = isQuestionComplete(q, state.answers);
         const nextLabel = q?.next_label || (isLast ? (q?.submit_label || "Submit") : "Next");
+
+        // if loading_lookup, disable Next (auto-advance), keep Back usable
+        const disableNext = q?.type === "loading_lookup" ? true : !stepOk;
 
         container.appendChild(
           mk("div", { class: "nav" }, [
@@ -447,9 +578,8 @@
               "button",
               {
                 class: "btn",
-                disabled: !stepOk,
+                disabled: disableNext,
                 onClick: async () => {
-                  // If this step is a submit step, submit (even if not the last; config controls flow)
                   if (q?.type === "submit") {
                     try {
                       await submitPayload(vq);
@@ -496,4 +626,3 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 })();
-
