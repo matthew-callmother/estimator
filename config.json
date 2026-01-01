@@ -182,6 +182,24 @@
     },
 
     {
+      "id": "permit_check",
+      "type": "loading_lookup",
+      "title": "Checking permit + code requirements…",
+      "subtitle": "Verifying municipality permit fees and requirements for your address.",
+      "duration_ms": 1400,
+      "lookup": {
+        "source": "municipalities",
+        "match_on": "addr_city",
+        "write_to": {
+          "permit_fee_usd": "permit_fee_usd",
+          "expansion_tank_required": "expansion_tank_required"
+        }
+      },
+      "auto_advance": true
+    },
+
+
+    {
       "id": "contact_gate",
       "type": "form",
       "title": "Lock in this estimate for 72 hours",
