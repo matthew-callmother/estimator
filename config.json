@@ -1,10 +1,19 @@
 {
   "meta": {
-    "version": "v1",
+    "version": "v2",
     "lock_hours": 72,
     "currency": "USD"
   },
   "pricing": {
+    "drivers": {
+      "type": "type",
+      "fuel": "fuel",
+      "location": "location",
+      "access": "access",
+      "urgency": "urgency",
+      "venting": "venting"
+    },
+    "exact_requires": ["addr_street", "addr_city", "addr_state", "addr_zip"],
     "base_price": {
       "tank_gas": 4200,
       "tank_electric": 3400,
@@ -50,6 +59,7 @@
       "subtitle": "This sets the equipment + labor baseline.",
       "tooltip": "Tankless installs usually require more labor and venting considerations.",
       "image_url": "",
+      "affects_pricing": true,
       "options": [
         { "value": "tank", "label": "Tank", "image_url": "" },
         { "value": "tankless", "label": "Tankless", "image_url": "" }
@@ -61,6 +71,7 @@
       "title": "What fuel does it use?",
       "subtitle": "Fuel affects venting, hookups, and code requirements.",
       "tooltip": "If you’re not sure, we add padding to avoid false precision.",
+      "affects_pricing": true,
       "options": [
         { "value": "gas", "label": "Gas", "image_url": "" },
         { "value": "electric", "label": "Electric", "image_url": "" },
@@ -73,6 +84,7 @@
       "title": "Where is the water heater installed?",
       "subtitle": "Access and safety requirements can change install time.",
       "tooltip": "Attic installs often require more time and safety setup.",
+      "affects_pricing": true,
       "options": [
         { "value": "garage", "label": "Garage", "image_url": "" },
         { "value": "attic", "label": "Attic", "image_url": "" },
@@ -87,6 +99,7 @@
       "subtitle": "Gas venting can materially change parts + labor.",
       "tooltip": "If you pick “Not sure,” we include a safety buffer.",
       "depends_on": { "question_id": "fuel", "equals": "gas" },
+      "affects_pricing": true,
       "options": [
         { "value": "standard", "label": "Standard vent", "image_url": "" },
         { "value": "power_vent", "label": "Power vent", "image_url": "" },
@@ -99,6 +112,7 @@
       "title": "How easy is the access to the heater?",
       "subtitle": "Tight spaces take longer and need more care.",
       "tooltip": "‘Tight’ means limited clearance to work safely around the unit.",
+      "affects_pricing": true,
       "options": [
         { "value": "easy", "label": "Easy", "image_url": "" },
         { "value": "tight", "label": "Tight", "image_url": "" },
@@ -111,23 +125,116 @@
       "title": "How soon do you need hot water back?",
       "subtitle": "Timing helps us set expectations and prioritize.",
       "tooltip": "ASAP may require schedule shuffling, which can affect cost slightly.",
+      "affects_pricing": true,
       "options": [
         { "value": "asap", "label": "ASAP (no hot water)", "image_url": "" },
         { "value": "week", "label": "This week", "image_url": "" },
         { "value": "month", "label": "1–4 weeks", "image_url": "" }
       ]
     },
+
     {
-      "id": "details_gate",
-      "type": "details_gate",
-      "title": "Enter your details to lock in your estimate for 72 hours",
-      "subtitle": "You’ll see your results next. You can still go back and change answers."
+      "id": "address_gate",
+      "type": "form",
+      "title": "Want an even more precise estimate?",
+      "subtitle": "Enter your address so we can look at permitting requirements.",
+      "affects_pricing": false,
+      "fields": [
+        {
+          "id": "addr_street",
+          "label": "Street",
+          "input_type": "text",
+          "required": true,
+          "placeholder": "123 Main St",
+          "autocomplete": "street-address",
+          "help": "We use this to validate city permitting requirements."
+        },
+        {
+          "id": "addr_city",
+          "label": "City",
+          "input_type": "text",
+          "required": true,
+          "placeholder": "Frisco",
+          "autocomplete": "address-level2"
+        },
+        {
+          "id": "addr_state",
+          "label": "State",
+          "input_type": "text",
+          "required": true,
+          "placeholder": "TX",
+          "autocomplete": "address-level1",
+          "pattern": "^[A-Za-z]{2}$",
+          "pattern_msg": "Use a 2-letter state code (e.g., TX)"
+        },
+        {
+          "id": "addr_zip",
+          "label": "Zip",
+          "input_type": "text",
+          "required": true,
+          "placeholder": "75034",
+          "autocomplete": "postal-code",
+          "pattern": "^\\d{5}(-\\d{4})?$",
+          "pattern_msg": "Use a 5-digit ZIP"
+        }
+      ],
+      "next_label": "Continue"
     },
+
+    {
+      "id": "contact_gate",
+      "type": "form",
+      "title": "Lock in this estimate for 72 hours",
+      "subtitle": "Submit your contact info to lock in this estimate for 72 hours.",
+      "affects_pricing": false,
+      "fields": [
+        {
+          "id": "contact_name",
+          "label": "Name",
+          "input_type": "text",
+          "required": true,
+          "placeholder": "Full name",
+          "autocomplete": "name"
+        },
+        {
+          "id": "contact_phone",
+          "label": "Phone",
+          "input_type": "tel",
+          "required": true,
+          "type": "phone",
+          "min_digits": 10,
+          "placeholder": "(555) 555-5555",
+          "autocomplete": "tel"
+        },
+        {
+          "id": "contact_email",
+          "label": "Email",
+          "input_type": "email",
+          "required": true,
+          "type": "email",
+          "placeholder": "you@email.com",
+          "autocomplete": "email"
+        }
+      ],
+      "next_label": "Review"
+    },
+
     {
       "id": "results_preview",
-      "type": "results_preview",
+      "type": "summary",
       "title": "Your estimate",
-      "subtitle": "Review your estimate before submitting."
+      "subtitle": "Review your estimate before submitting.",
+      "affects_pricing": false,
+      "next_label": "Get My Estimate"
+    },
+
+    {
+      "id": "submit",
+      "type": "submit",
+      "title": "Submit",
+      "subtitle": "We’ll hold this estimate for 72 hours.",
+      "affects_pricing": false,
+      "submit_label": "Submit"
     }
   ],
   "result_copy": {
