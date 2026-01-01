@@ -184,6 +184,7 @@
     {
       "id": "permit_check",
       "type": "loading_lookup",
+      "transient": true,
       "title": "Checking permit + code requirements…",
       "subtitle": "Verifying municipality permit fees and requirements for your address.",
       "duration_ms": 1400,
@@ -195,7 +196,9 @@
           "expansion_tank_required": "expansion_tank_required"
         }
       },
-      "auto_advance": true
+      "writes": ["permit_fee_usd", "expansion_tank_required", "municipality_city", "municipality_found"],
+      "auto_advance": true,
+      "affects_pricing": false
     },
 
 
