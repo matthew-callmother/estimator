@@ -8,18 +8,31 @@
 
   // ---------- Helpers ----------
   const mk = (tag, attrs = {}, children = []) => {
-    const el = document.createElement(tag);
-    for (const [k, v] of Object.entries(attrs || {})) {
-      if (k === "class") el.className = v;
-      else if (k === "html") el.innerHTML = v;
-      else if (k.startsWith("on") && typeof v === "function") el.addEventListener(k.slice(2).toLowerCase(), v);
-      else if (v !== null && v !== undefined) el.setAttribute(k, String(v));
+  const el = document.createElement(tag);
+
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") {
+      el.className = v;
+    } else if (k === "html") {
+      el.innerHTML = v;
+    } else if (k.startsWith("on") && typeof v === "function") {
+      el.addEventListener(k.slice(2).toLowerCase(), v);
+    } else if (typeof v === "boolean") {
+      // IMPORTANT: boolean attributes must be set via property (and only present when true)
+      if (k in el) el[k] = v;
+      if (v) el.setAttribute(k, "");
+      else el.removeAttribute(k);
+    } else if (v !== null && v !== undefined) {
+      el.setAttribute(k, String(v));
     }
-    for (const c of children) {
-      if (c) el.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
-    }
-    return el;
-  };
+  }
+
+  for (const c of children) {
+    if (c) el.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+  }
+  return el;
+};
+
 
   const qs = (sel, root = document) => root.querySelector(sel);
   const money = (n) => Math.round(n).toLocaleString();
@@ -483,3 +496,4 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 })();
+
