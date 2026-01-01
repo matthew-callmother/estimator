@@ -535,29 +535,29 @@
                   const start = Date.now();
                   const fillId = `loadfill_${next.id}`;
 
-                  const card = mk("div", { class: "card" }, [
-                    mk("div", { class: "stepHeader" }, [
-                      mk("div", { class: "progressWrap" }, [
-                        mk("div", { class: "progressMeta" }, [`Step ${state.stepIndex + 2} of ${vq.length}`]),
-                        mk("div", { class: "progressBar" }, [
-                          mk("div", {
-                            class: "progressFill",
-                            style: `width:${Math.round(((state.stepIndex + 2) / vq.length) * 100)}%`,
-                          }),
+                 const card = mk("div", { class: "card" }, [
+                      mk("div", { class: "stepHeader" }, [
+                        mk("div", { class: "progressWrap" }, [
+                          mk("div", { class: "progressMeta" }, [`Step ${state.stepIndex + 2} of ${vq.length}`]),
+                          mk("div", { class: "progressBar" }, [
+                            mk("div", {
+                              class: "progressFill",
+                              style: `width:${Math.round(((state.stepIndex + 2) / vq.length) * 100)}%`,
+                            }),
+                          ]),
                         ]),
                       ]),
-                      mk("h2", {}, [next.title || "Checking…"]),
-                      next.subtitle ? mk("div", { class: "stepSub" }, [next.subtitle]) : null,
-                    ]),
-                    mk("div", { class: "loading" }, [
-                      mk("div", { class: "loadingInner" }, [
-                        mk("div", { class: "spinner" }),
-                        mk("div", { class: "loadBar" }, [
-                          mk("div", { id: fillId, class: "loadFill", style: "width:0%" }),
+                      mk("div", { class: "loading" }, [
+                        mk("div", { class: "loadingInner" }, [
+                          mk("div", { class: "spinner" }),
+                          mk("div", { class: "loadingTitle" }, [next.title || "Checking…"]),
+                          next.subtitle ? mk("div", { class: "loadingSub" }, [next.subtitle]) : null,
+                          mk("div", { class: "loadBar" }, [
+                            mk("div", { id: fillId, class: "loadFill", style: "width:0%" }),
+                          ]),
                         ]),
                       ]),
-                    ]),
-                  ]);
+                    ]);;
 
                   mount.appendChild(card);
 
@@ -628,3 +628,4 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 })();
+
