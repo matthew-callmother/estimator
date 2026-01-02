@@ -88,6 +88,9 @@
 
       state.answers.municipality_city = row ? city : (city || null);
       state.answers.municipality_found = !!row;
+
+      // mark permit lookup as fresh for the current forward pass
+      state.answers.__permit_done = true;
     }
   }
 
@@ -279,13 +282,14 @@
         return step?.transient === true;
       }
 
-      function clearLookupState(vq) {
-        for (const step of (vq || [])) {
-          if (step?.type === "loading_lookup") {
+      function clearPermitOutputs() {
+        (cfg.questions || []).forEach((step) => {
+          if (step?.type === "loading_lookup" && step?.lookup?.source === "municipalities") {
             delete state.answers[`__ran_${step.id}`];
-            for (const k of (step.writes || [])) delete state.answers[k];
+            (step.writes || []).forEach((k) => delete state.answers[k]);
           }
-        }
+        });
+        delete state.answers.__permit_done;
       }
 
       function backIndexSkippingTransients(vq, fromIndex) {
@@ -352,7 +356,7 @@
 
         const any = hasAnyPricingSignal(vq);
         const pricingDone = allPricingQuestionsComplete(vq);
-        const exactAllowed = pricingDone && hasExactRequirements();
+        const exactAllowed = pricingDone && hasExactRequirements() && state.answers.__permit_done === true;
 
         const exact = computePrice(cfg, state.answers);
         const range = computePriceRange(cfg, state.answers, (vq || []).filter((qq) => qq.affects_pricing !== false));
@@ -422,7 +426,10 @@
                   value: val,
                   placeholder: f.placeholder || "",
                   autocomplete: f.autocomplete || "",
-                  onInput: (e) => { state.answers[f.id] = e.target.value; },
+                  onInput: (e) => {
+                    state.answers[f.id] = e.target.value;
+                    if (String(f.id).startsWith("addr_")) clearPermitOutputs(); // range again until lookup runs
+                  },
                   onBlur: () => render(),
                 }),
                 (!result.ok && !isEmpty(val)) ? mk("div", { class: "fieldErr" }, [result.msg]) : null,
@@ -469,7 +476,6 @@
               ])
             );
           }
-
           if (!isEmpty(state.answers.permit_fee_usd)) {
             block.appendChild(
               mk("div", { class: "summaryRow" }, [
@@ -478,7 +484,6 @@
               ])
             );
           }
-
           if (state.answers.expansion_tank_required === true) {
             block.appendChild(
               mk("div", { class: "summaryRow" }, [
@@ -506,8 +511,8 @@
               class: "btn secondary",
               disabled: !canGoBack,
               onClick: () => {
+                clearPermitOutputs(); // range again after any back
                 const prev = backIndexSkippingTransients(vq, state.stepIndex);
-                if (prev < state.stepIndex - 1) clearLookupState(vq);
                 state.stepIndex = prev;
                 render();
               },
@@ -522,12 +527,11 @@
                   catch (e) { console.error(e); alert("Submit failed. Please try again."); }
                   return;
                 }
-
                 if (isLast) return;
 
                 const next = vq[state.stepIndex + 1];
 
-                // transient loading_lookup runs BETWEEN steps (never becomes a "back" destination)
+                // transient loading_lookup runs BETWEEN steps (not a real step)
                 if (next?.type === "loading_lookup" && next?.transient === true) {
                   mount.innerHTML = "";
 
@@ -535,35 +539,36 @@
                   const start = Date.now();
                   const fillId = `loadfill_${next.id}`;
 
-                 const card = mk("div", { class: "card" }, [
-                      mk("div", { class: "stepHeader" }, [
-                        mk("div", { class: "progressWrap" }, [
-                          mk("div", { class: "progressMeta" }, [`Step ${state.stepIndex + 2} of ${vq.length}`]),
-                          mk("div", { class: "progressBar" }, [
-                            mk("div", {
-                              class: "progressFill",
-                              style: `width:${Math.round(((state.stepIndex + 2) / vq.length) * 100)}%`,
-                            }),
-                          ]),
+                  const card = mk("div", { class: "card" }, [
+                    mk("div", { class: "stepHeader" }, [
+                      mk("div", { class: "progressWrap" }, [
+                        mk("div", { class: "progressMeta" }, [`Step ${state.stepIndex + 2} of ${vq.length}`]),
+                        mk("div", { class: "progressBar" }, [
+                          mk("div", {
+                            class: "progressFill",
+                            style: `width:${Math.round(((state.stepIndex + 2) / vq.length) * 100)}%`,
+                          }),
                         ]),
                       ]),
-                      mk("div", { class: "loading" }, [
-                        mk("div", { class: "loadingInner" }, [
-                          mk("div", { class: "spinner" }),
-                          mk("div", { class: "loadingTitle" }, [next.title || "Checking…"]),
-                          next.subtitle ? mk("div", { class: "loadingSub" }, [next.subtitle]) : null,
-                          mk("div", { class: "loadBar" }, [
-                            mk("div", { id: fillId, class: "loadFill", style: "width:0%" }),
-                          ]),
+                    ]),
+                    mk("div", { class: "loading" }, [
+                      mk("div", { class: "loadingInner" }, [
+                        mk("div", { class: "spinner" }),
+                        mk("div", { class: "loadingTitle" }, [next.title || "Checking…"]),
+                        next.subtitle ? mk("div", { class: "loadingSub" }, [next.subtitle]) : null,
+                        mk("div", { class: "loadBar" }, [
+                          mk("div", { id: fillId, class: "loadFill", style: "width:0%" }),
                         ]),
                       ]),
-                    ]);;
+                    ]),
+                  ]);
 
                   mount.appendChild(card);
 
-                  // force requery each time user goes forward from address
+                  // always re-run
                   delete state.answers[`__ran_${next.id}`];
-                  for (const k of (next.writes || [])) delete state.answers[k];
+                  (next.writes || []).forEach((k) => delete state.answers[k]);
+                  delete state.answers.__permit_done;
 
                   const tick = () => {
                     const el = document.getElementById(fillId);
@@ -628,4 +633,3 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 })();
-
