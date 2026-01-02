@@ -89,7 +89,7 @@
       state.answers.municipality_city = row ? city : (city || null);
       state.answers.municipality_found = !!row;
 
-      // mark permit lookup as fresh for the current forward pass
+      // allow "exact" after lookup completes (until user changes answers/back)
       state.answers.__permit_done = true;
     }
   }
@@ -126,14 +126,12 @@
     if (fuel === "gas" || fuel === "not_sure") {
       price += Number(mods.venting?.[vent] ?? 0);
     }
-
     if (fuel === "not_sure") {
       price += Number(mods.fuel_not_sure_penalty ?? 0);
     }
 
     // municipality adjustments (populated by lookup)
     price += Number(answers.permit_fee_usd || 0);
-
     if (answers.expansion_tank_required === true) {
       price += Number(mods.expansion_tank_cost_usd ?? 0);
     }
@@ -184,9 +182,9 @@
     const dims = ["location", "access", "urgency", "venting"];
     for (const dim of dims) {
       const qid = cfg?.pricing?.drivers?.[dim] || dim;
-
-      if (dim === "venting" && fuel && fuel !== "gas" && fuel !== "not_sure") continue;
-
+      if (dim === "venting") {
+        if (fuel && fuel !== "gas" && fuel !== "not_sure") continue;
+      }
       if (ids.has(qid) || ids.has(dim)) {
         const r = dimRange(dim);
         min += r.min;
@@ -248,7 +246,6 @@
       return true;
     }
 
-    if (q.type === "content" || q.type === "summary" || q.type === "submit" || q.type === "loading_lookup") return true;
     return true;
   }
 
@@ -318,6 +315,33 @@
         return req.every((fieldId) => !isEmpty(state.answers[fieldId]));
       }
 
+      function computePreview(vq) {
+        const any = hasAnyPricingSignal(vq);
+        const pricingDone = allPricingQuestionsComplete(vq);
+        const exactAllowed = pricingDone && hasExactRequirements() && state.answers.__permit_done === true;
+
+        const exact = computePrice(cfg, state.answers);
+        const range = computePriceRange(cfg, state.answers, (vq || []).filter((qq) => qq.affects_pricing !== false));
+
+        let label = "Estimated Total";
+        let value = "—";
+        let sub = "Answer a few questions to see your range.";
+
+        if (any && !exactAllowed) {
+          label = "Estimated Range";
+          value = `$${money(range.min)}–$${money(range.max)}`;
+          sub = pricingDone ? "Add your address to get an exact number." : "Range updates as you answer.";
+        }
+
+        if (any && exactAllowed) {
+          label = "Exact Total";
+          value = `$${money(exact.display_price)}`;
+          sub = "Based on your answers + municipality rules.";
+        }
+
+        return { label, value, sub };
+      }
+
       async function submitPayload(vq) {
         const exact = computePrice(cfg, state.answers);
         const range = computePriceRange(cfg, state.answers, (vq || []).filter((q) => q.affects_pricing !== false));
@@ -342,6 +366,20 @@
         alert("Submitted! We'll reach out shortly.");
       }
 
+      // Always call render via scheduleRender so preview recalcs on:
+      // - answer select
+      // - forward/back
+      // - form typing
+      let renderQueued = false;
+      function scheduleRender() {
+        if (renderQueued) return;
+        renderQueued = true;
+        requestAnimationFrame(() => {
+          renderQueued = false;
+          render();
+        });
+      }
+
       function render() {
         persist();
         mount.innerHTML = "";
@@ -353,29 +391,7 @@
         const isLast = state.stepIndex === vq.length - 1;
 
         const pct = vq.length ? Math.round(((state.stepIndex + 1) / vq.length) * 100) : 0;
-
-        const any = hasAnyPricingSignal(vq);
-        const pricingDone = allPricingQuestionsComplete(vq);
-        const exactAllowed = pricingDone && hasExactRequirements() && state.answers.__permit_done === true;
-
-        const exact = computePrice(cfg, state.answers);
-        const range = computePriceRange(cfg, state.answers, (vq || []).filter((qq) => qq.affects_pricing !== false));
-
-        let previewLabel = "Estimated Total";
-        let previewValue = "—";
-        let previewSub = "Answer a few questions to see your range.";
-
-        if (any && !exactAllowed) {
-          previewLabel = "Estimated Range";
-          previewValue = `$${money(range.min)}–$${money(range.max)}`;
-          previewSub = pricingDone ? "Add your address to get an exact number." : "Range updates as you answer.";
-        }
-
-        if (any && exactAllowed) {
-          previewLabel = "Exact Total";
-          previewValue = `$${money(exact.display_price)}`;
-          previewSub = "Based on your answers + municipality rules.";
-        }
+        const preview = computePreview(vq);
 
         const container = mk("div", { class: "card" }, [
           mk("div", { class: "stepHeader" }, [
@@ -402,7 +418,9 @@
                 class: `choice ${active ? "active" : ""}`,
                 onClick: () => {
                   state.answers[q.id] = String(opt.value);
-                  render();
+                  // changing answers should force re-check for exact until permit step reruns
+                  clearPermitOutputs();
+                  scheduleRender();
                 },
               }, [
                 mk("div", { class: "choiceMain" }, [
@@ -428,9 +446,12 @@
                   autocomplete: f.autocomplete || "",
                   onInput: (e) => {
                     state.answers[f.id] = e.target.value;
-                    if (String(f.id).startsWith("addr_")) clearPermitOutputs(); // range again until lookup runs
+
+                    // if address or other pricing-related fields change, exact must be re-earned
+                    if (String(f.id).startsWith("addr_")) clearPermitOutputs();
+
+                    scheduleRender(); // <- updates preview live while typing
                   },
-                  onBlur: () => render(),
                 }),
                 (!result.ok && !isEmpty(val)) ? mk("div", { class: "fieldErr" }, [result.msg]) : null,
               ])
@@ -440,7 +461,6 @@
           content.appendChild(mk("div", { class: "contentBlock", html: q.html || "" }));
         } else if (q?.type === "summary") {
           const block = mk("div", { class: "summary" });
-
           for (const qq of (vq || [])) {
             if (qq.type === "submit" || qq.type === "summary" || qq.type === "content" || qq.type === "loading_lookup") continue;
 
@@ -468,31 +488,6 @@
             }
           }
 
-          if (!isEmpty(state.answers.municipality_city)) {
-            block.appendChild(
-              mk("div", { class: "summaryRow" }, [
-                mk("div", { class: "summaryK" }, ["Municipality"]),
-                mk("div", { class: "summaryV" }, [String(state.answers.municipality_city)]),
-              ])
-            );
-          }
-          if (!isEmpty(state.answers.permit_fee_usd)) {
-            block.appendChild(
-              mk("div", { class: "summaryRow" }, [
-                mk("div", { class: "summaryK" }, ["Permit fee"]),
-                mk("div", { class: "summaryV" }, [`$${money(state.answers.permit_fee_usd)}`]),
-              ])
-            );
-          }
-          if (state.answers.expansion_tank_required === true) {
-            block.appendChild(
-              mk("div", { class: "summaryRow" }, [
-                mk("div", { class: "summaryK" }, ["Expansion tank"]),
-                mk("div", { class: "summaryV" }, ["Required"]),
-              ])
-            );
-          }
-
           content.appendChild(block);
         } else if (q?.type === "submit") {
           content.appendChild(mk("div", { class: "note" }, [q.note || "Submit your info to lock in this estimate."]));
@@ -511,10 +506,9 @@
               class: "btn secondary",
               disabled: !canGoBack,
               onClick: () => {
-                clearPermitOutputs(); // range again after any back
-                const prev = backIndexSkippingTransients(vq, state.stepIndex);
-                state.stepIndex = prev;
-                render();
+                clearPermitOutputs(); // always revert to range until permit step reruns
+                state.stepIndex = backIndexSkippingTransients(vq, state.stepIndex);
+                scheduleRender();
               },
             }, ["Back"]),
 
@@ -531,7 +525,7 @@
 
                 const next = vq[state.stepIndex + 1];
 
-                // transient loading_lookup runs BETWEEN steps (not a real step)
+                // transient loading_lookup runs BETWEEN steps (not a real back destination)
                 if (next?.type === "loading_lookup" && next?.transient === true) {
                   mount.innerHTML = "";
 
@@ -544,10 +538,7 @@
                       mk("div", { class: "progressWrap" }, [
                         mk("div", { class: "progressMeta" }, [`Step ${state.stepIndex + 2} of ${vq.length}`]),
                         mk("div", { class: "progressBar" }, [
-                          mk("div", {
-                            class: "progressFill",
-                            style: `width:${Math.round(((state.stepIndex + 2) / vq.length) * 100)}%`,
-                          }),
+                          mk("div", { class: "progressFill", style: `width:${Math.round(((state.stepIndex + 2) / vq.length) * 100)}%` }),
                         ]),
                       ]),
                     ]),
@@ -565,7 +556,7 @@
 
                   mount.appendChild(card);
 
-                  // always re-run
+                  // always re-run and re-earn exact
                   delete state.answers[`__ran_${next.id}`];
                   (next.writes || []).forEach((k) => delete state.answers[k]);
                   delete state.answers.__permit_done;
@@ -593,15 +584,16 @@
                     setTimeout(() => {
                       state.stepIndex = state.stepIndex + 2; // skip over transient step
                       persist();
-                      render();
+                      scheduleRender();
                     }, remaining + 250);
                   })();
 
                   return;
                 }
 
+                // normal next
                 state.stepIndex++;
-                render();
+                scheduleRender();
               },
             }, [nextLabel]),
           ])
@@ -611,18 +603,18 @@
         container.appendChild(
           mk("div", { class: "preview" }, [
             mk("div", { class: "previewTop" }, [
-              mk("span", {}, [previewLabel]),
+              mk("span", {}, [preview.label]),
               tooltip("Sample tooltip text. Click “?” to toggle. Style .tip / .tipBubble."),
             ]),
-            mk("div", { class: "previewPrice" }, [previewValue]),
-            mk("div", { class: "previewSub" }, [previewSub]),
+            mk("div", { class: "previewPrice" }, [preview.value]),
+            mk("div", { class: "previewSub" }, [preview.sub]),
           ])
         );
 
         mount.appendChild(container);
       }
 
-      render();
+      scheduleRender();
     } catch (e) {
       const mount = document.getElementById(MOUNT_ID);
       if (mount) mount.innerHTML = `<p>Error loading configuration. Check console.</p>`;
