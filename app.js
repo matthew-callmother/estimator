@@ -1,13 +1,15 @@
 (function () {
   "use strict";
 
+  // ---- Config ----
   const ZAPIER_WEBHOOK_URL = "PASTE_YOUR_ZAPIER_CATCH_HOOK_URL_HERE";
   const CONFIG_URL = "https://matthew-callmother.github.io/estimator/config.json";
-  const MUNICIPALITIES_URL = "https://matthew-callmother.github.io/estimator/municipalities-dfw.json";
   const MOUNT_ID = "wh-estimator";
-  const STORAGE_KEY = "wh_estimator_v2_state";
+  const STORAGE_KEY = "wh_estimator_v3_state";
 
-  /* ---------------- Helpers ---------------- */
+  // ---- Helpers ----
+  const qs = (sel, root = document) => root.querySelector(sel);
+
   const mk = (tag, attrs = {}, children = []) => {
     const el = document.createElement(tag);
     for (const [k, v] of Object.entries(attrs || {})) {
@@ -20,18 +22,15 @@
         else el.removeAttribute(k);
       } else if (v !== null && v !== undefined) el.setAttribute(k, String(v));
     }
-    for (const c of children) {
-      if (c) el.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
-    }
+    for (const c of children) el.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
     return el;
   };
 
-  const qs = (sel, root = document) => root.querySelector(sel);
   const money = (n) => Math.round(Number(n) || 0).toLocaleString();
-  const normalizePhone = (s) => String(s || "").replace(/\D/g, "");
+  const normPhone = (s) => String(s || "").replace(/\D/g, "");
   const isEmpty = (v) => v === null || v === undefined || String(v).trim() === "";
 
-  /* ---------------- Tooltip ---------------- */
+  // ---- Tooltip ----
   function tooltip(text) {
     if (!text) return null;
 
@@ -46,7 +45,6 @@
       e.stopPropagation();
       bubble.style.display = bubble.style.display === "none" ? "block" : "none";
 
-      // close on next outside click (don’t instantly close on the same click)
       setTimeout(() => {
         document.addEventListener(
           "click",
@@ -62,545 +60,548 @@
     return wrap;
   }
 
-  /* ---------------- Municipality lookup ---------------- */
-  let MUNICACHE = null;
+  // ---- Lookup (municipalities) ----
+  let MUNI_CACHE = null;
 
-  async function loadMunicipalities() {
-    if (MUNICACHE) return MUNICACHE;
-    const res = await fetch(MUNICIPALITIES_URL, { cache: "no-store" });
-    MUNICACHE = await res.json();
-    return MUNICACHE;
+  async function loadMunicipalities(url) {
+    if (MUNI_CACHE) return MUNI_CACHE;
+    const res = await fetch(url, { cache: "no-store" });
+    MUNI_CACHE = await res.json();
+    return MUNI_CACHE;
   }
 
-  function normalizeCityName(raw, muni) {
-    const s = String(raw || "").trim();
-    if (!s) return "";
-    const aliased = muni?.aliases?.[s] || s;
-    return aliased.replace(/,\s*TX$/i, "").trim();
+  function safeStr(v) {
+    return String(v == null ? "" : v).trim();
   }
 
-  async function runLookup(state, lookupSpec) {
-    if (!lookupSpec) return;
-    if (lookupSpec.source !== "municipalities") return;
-
-    const muni = await loadMunicipalities();
-    const matchField = lookupSpec.match_on || "addr_city";
-
-    const cityRaw = state.answers[matchField];
-    const city = normalizeCityName(cityRaw, muni);
-
-    const row = muni?.cities?.[city] || null;
-    const mapping = lookupSpec.write_to || {};
-
-    for (const [rowKey, answerKey] of Object.entries(mapping)) {
-      state.answers[answerKey] = row ? row[rowKey] : null;
-    }
-
-    state.answers.municipality_city = row ? city : (city || null);
-    state.answers.municipality_found = !!row;
-    state.answers.__permit_done = true; // “exact unlocked” until user changes/back
+  function addressSig(answers) {
+    return [
+      safeStr(answers.addr_street).toLowerCase(),
+      safeStr(answers.addr_city).toLowerCase(),
+      safeStr(answers.addr_state).toLowerCase(),
+      safeStr(answers.addr_zip).toLowerCase(),
+    ].join("|");
   }
 
-  /* ---------------- Pricing ---------------- */
-  function getDriverAnswer(cfg, answers, driverKey, fallbackId) {
-    const drivers = cfg?.pricing?.drivers || {};
-    const qid = drivers[driverKey] || fallbackId;
-    return answers[qid];
-  }
-
-  function computeExact(cfg, answers) {
-    const p = cfg.pricing || {};
-    const base = p.base_price || {};
-    const mods = p.modifiers || {};
-
-    const type = getDriverAnswer(cfg, answers, "type", "type") || "tank";
-    const fuel = getDriverAnswer(cfg, answers, "fuel", "fuel") || "gas";
-
-    let key = `${type}_${fuel}`;
-    if (!base[key]) key = "tank_gas";
-
-    let price = Number(base[key] || 0);
-
-    const loc = getDriverAnswer(cfg, answers, "location", "location");
-    const acc = getDriverAnswer(cfg, answers, "access", "access");
-    const urg = getDriverAnswer(cfg, answers, "urgency", "urgency");
-    const vent = getDriverAnswer(cfg, answers, "venting", "venting");
-
-    price += Number(mods.location?.[loc] ?? 0);
-    price += Number(mods.access?.[acc] ?? 0);
-    price += Number(mods.urgency?.[urg] ?? 0);
-
-    if (fuel === "gas" || fuel === "not_sure") price += Number(mods.venting?.[vent] ?? 0);
-    if (fuel === "not_sure") price += Number(mods.fuel_not_sure_penalty ?? 0);
-
-    // lookup outputs
-    price += Number(answers.permit_fee_usd || 0);
-    if (answers.expansion_tank_required === true) price += Number(mods.expansion_tank_cost_usd ?? 0);
-
-    const roundTo = p.safety?.round_to || 25;
-    price = Math.round(price / roundTo) * roundTo;
-    return { display_price: price, scenario_key: key };
-  }
-
-  function computeRange(cfg, answers, pricingQuestions) {
-    const p = cfg.pricing || {};
-    const base = p.base_price || {};
-    const mods = p.modifiers || {};
-
-    const type = getDriverAnswer(cfg, answers, "type", "type") || null;
-    const fuel = getDriverAnswer(cfg, answers, "fuel", "fuel") || null;
-
-    const baseCandidates = Object.entries(base)
-      .filter(([k]) => {
-        const [kType, kFuel] = String(k).split("_");
-        if (type && kType !== type) return false;
-        if (fuel && fuel !== "not_sure" && kFuel !== fuel) return false;
-        return true;
-      })
-      .map(([, v]) => Number(v))
-      .filter((n) => Number.isFinite(n));
-
-    let min = baseCandidates.length ? Math.min(...baseCandidates) : 0;
-    let max = baseCandidates.length ? Math.max(...baseCandidates) : 0;
-
-    const idsInWizard = new Set((pricingQuestions || []).map((q) => q.id).filter(Boolean));
-
-    const addDim = (dimKey) => {
-      const qid = cfg?.pricing?.drivers?.[dimKey] || dimKey;
-      if (!(idsInWizard.has(qid) || idsInWizard.has(dimKey))) return;
-
-      // venting only matters for gas/not_sure
-      if (dimKey === "venting" && fuel && fuel !== "gas" && fuel !== "not_sure") return;
-
-      const table = mods?.[dimKey] || {};
-      const vals = Object.values(table).map(Number).filter(Number.isFinite);
-      if (!vals.length) return;
-
-      const ans = answers[qid] ?? answers[dimKey];
-      if (!isEmpty(ans)) {
-        const v = Number(table?.[ans] ?? 0);
-        min += v;
-        max += v;
-      } else {
-        min += Math.min(...vals);
-        max += Math.max(...vals);
-      }
-    };
-
-    ["location", "access", "urgency", "venting"].forEach(addDim);
-
-    if (fuel === "not_sure") {
-      const pad = Number(mods.fuel_not_sure_penalty ?? 0);
-      min += pad;
-      max += pad;
-    }
-
-    const roundTo = p.safety?.round_to || 25;
-    min = Math.round(min / roundTo) * roundTo;
-    max = Math.round(max / roundTo) * roundTo;
-
-    return { min, max };
-  }
-
-  /* ---------------- Validation ---------------- */
+  // ---- Validation ----
   function validateField(field, rawValue) {
     const v = rawValue == null ? "" : String(rawValue);
 
     if (field.required && isEmpty(v)) return { ok: false, msg: "Required" };
 
     if (!isEmpty(v) && field.type === "phone") {
-      if (normalizePhone(v).length < (field.min_digits || 10)) return { ok: false, msg: "Enter a valid phone" };
+      if (normPhone(v).length < (field.min_digits || 10)) return { ok: false, msg: "Enter a valid phone" };
     }
 
     if (!isEmpty(v) && field.type === "email") {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return { ok: false, msg: "Enter a valid email" };
     }
 
+    if (!isEmpty(v) && field.pattern) {
+      const re = new RegExp(field.pattern);
+      if (!re.test(v)) return { ok: false, msg: field.pattern_msg || "Invalid format" };
+    }
+
     return { ok: true, msg: "" };
   }
 
-  function isQuestionComplete(q, answers) {
-    if (!q) return true;
+  function isStepComplete(step, answers) {
+    if (!step) return true;
 
-    if (q.type === "single_select") return !isEmpty(answers[q.id]);
+    if (step.type === "single_select") return !isEmpty(answers[step.id]);
 
-    if (q.type === "form") {
-      for (const f of (q.fields || [])) {
+    if (step.type === "form") {
+      for (const f of step.fields || []) {
         const r = validateField(f, answers[f.id]);
         if (!r.ok) return false;
       }
       return true;
     }
 
-    // loading_lookup/content/summary/submit don't block "Next" by themselves
     return true;
   }
 
-  /* ---------------- Boot ---------------- */
+  // ---- Routing guards ----
+  function isAllowedQuestionId(id, answers) {
+    if (id === "tank_fuel") return answers.type === "tank";
+    if (id === "tankless_fuel") return answers.type === "tankless";
+    return true;
+  }
+
+  function pruneState(state) {
+    // remove answers that no longer make sense
+    if (state.answers.type === "tank") delete state.answers.tankless_fuel;
+    if (state.answers.type === "tankless") delete state.answers.tank_fuel;
+
+    // prune history
+    state.history = (state.history || []).filter((id) => isAllowedQuestionId(id, state.answers));
+
+    // if current id is not allowed anymore, send them to the start
+    if (!isAllowedQuestionId(state.currentId, state.answers)) state.currentId = "type";
+  }
+
+  // ---- Pricing (simple: only what the user selected) ----
+  function getSelectedOption(step, answers) {
+    const val = answers[step.id];
+    if (isEmpty(val)) return null;
+    return (step.options || []).find((o) => String(o.value) === String(val)) || null;
+  }
+
+  function computeRange(cfg, answers) {
+    let low = 0;
+    let high = 0;
+
+    for (const q of cfg.questions || []) {
+      if (q.type !== "single_select") continue;
+      const opt = getSelectedOption(q, answers);
+      if (!opt || !opt.price) continue;
+
+      low += Number(opt.price.low) || 0;
+      high += Number(opt.price.high) || 0;
+    }
+
+    const roundTo = Number(cfg?.pricing?.round_to) || 25;
+    low = Math.round(low / roundTo) * roundTo;
+    high = Math.round(high / roundTo) * roundTo;
+
+    return { low, high };
+  }
+
+  function computeExact(cfg, range, answers) {
+    // exact is ONLY available after permit lookup completes
+    const mode = String(cfg?.pricing?.exact_mode || "mid").toLowerCase();
+    let base = 0;
+
+    if (mode === "low") base = range.low;
+    else if (mode === "high") base = range.high;
+    else base = (range.low + range.high) / 2;
+
+    const permit = Number(answers.permit_fee_usd) || 0;
+    const addon = answers.expansion_tank_required === true ? Number(cfg?.lookup?.expansion_tank_addon) || 0 : 0;
+
+    const roundTo = Number(cfg?.pricing?.round_to) || 25;
+    let exact = base + permit + addon;
+    exact = Math.round(exact / roundTo) * roundTo;
+
+    return exact;
+  }
+
+  // ---- Loading screen ----
+  function renderLoading(mount, step, pct) {
+    mount.innerHTML = "";
+
+    const card = mk("div", { class: "card" }, [
+      mk("div", { class: "stepHeader" }, [
+        mk("div", { class: "progressWrap" }, [
+          mk("div", { class: "progressMeta" }, [pct ? `Progress ${pct}%` : ""]),
+          mk("div", { class: "progressBar" }, [mk("div", { class: "progressFill", style: `width:${pct || 0}%` })]),
+        ]),
+      ]),
+      mk("div", { class: "loading" }, [
+        mk("div", { class: "loadingInner" }, [
+          mk("div", { class: "spinner" }),
+          mk("div", { class: "loadingTitle" }, [step.title || "Working…"]),
+          step.subtitle ? mk("div", { class: "loadingSub" }, [step.subtitle]) : null,
+          mk("div", { class: "loadBar" }, [mk("div", { id: "loadFill", class: "loadFill", style: "width:0%" })]),
+        ]),
+      ]),
+    ]);
+
+    mount.appendChild(card);
+
+    const fill = qs("#loadFill", mount);
+    if (fill) fill.style.width = "8%";
+  }
+
+  // ---- Main ----
   async function boot() {
     const mount = document.getElementById(MOUNT_ID);
     if (!mount) return;
 
-    try {
-      const cfg = await (await fetch(CONFIG_URL, { cache: "no-store" })).json();
+    const cfg = await (await fetch(CONFIG_URL, { cache: "no-store" })).json();
 
-      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-      const state = {
-        stepIndex: saved.stepIndex || 0,
-        answers: saved.answers || {},
-      };
+    const byId = new Map((cfg.questions || []).map((q) => [q.id, q]));
+    const getQ = (id) => byId.get(id) || null;
 
-      const persist = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
 
-      const visibleQuestions = () => {
-        const all = cfg.questions || [];
-        return all.filter((q) => {
-          if (!q.depends_on) return true;
-          const a = state.answers[q.depends_on.question_id];
-          return String(a) === String(q.depends_on.equals);
-        });
-      };
+    const state = {
+      currentId: saved.currentId || cfg?.meta?.start_id || (cfg.questions?.[0]?.id || null),
+      answers: saved.answers || {},
+      history: saved.history || [],
+      meta: saved.meta || {
+        permit_done: false,
+        permit_sig: null,
+        exact_unlocked: false,
+        after_permit: false
+      },
+    };
 
-      const isTransient = (step) => step?.transient === true;
+    const persist = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 
-      const clearPermitOutputs = () => {
-        // revert to range until permit step reruns
-        delete state.answers.__permit_done;
-        (cfg.questions || []).forEach((step) => {
-          if (step?.type === "loading_lookup" && step?.lookup?.source === "municipalities") {
-            (step.writes || []).forEach((k) => delete state.answers[k]);
-          }
-        });
-      };
+    function invalidateAddressDerived() {
+      state.meta.permit_done = false;
+      state.meta.permit_sig = null;
+      state.meta.exact_unlocked = false;
+      state.meta.after_permit = false;
 
-      const backIndexSkippingTransients = (vq, fromIndex) => {
-        let i = fromIndex - 1;
-        while (i >= 0 && isTransient(vq[i])) i--;
-        return Math.max(i, 0);
-      };
-
-      const allPricingQuestionsComplete = (vq) => {
-        const pricingQs = (vq || []).filter((q) => q.affects_pricing !== false);
-        return pricingQs.every((q) => isQuestionComplete(q, state.answers));
-      };
-
-      const hasAnyPricingSignal = (vq) => {
-        const pricingQs = (vq || []).filter((q) => q.affects_pricing !== false);
-        return pricingQs.some((q) => {
-          if (q.type === "single_select") return !isEmpty(state.answers[q.id]);
-          if (q.type === "form") return (q.fields || []).some((f) => !isEmpty(state.answers[f.id]));
-          return false;
-        });
-      };
-
-      const hasExactRequirements = () => {
-        const req = cfg?.pricing?.exact_requires || [];
-        if (!req.length) return true;
-        return req.every((fieldId) => !isEmpty(state.answers[fieldId]));
-      };
-
-      function computePreview(vq) {
-        const any = hasAnyPricingSignal(vq);
-        const pricingDone = allPricingQuestionsComplete(vq);
-        const exactAllowed = pricingDone && hasExactRequirements() && state.answers.__permit_done === true;
-
-        const pricingQuestions = (vq || []).filter((qq) => qq.affects_pricing !== false);
-        const range = computeRange(cfg, state.answers, pricingQuestions);
-        const exact = computeExact(cfg, state.answers);
-
-        let label = "Estimated Total";
-        let value = "—";
-        let sub = "Answer a few questions to see your range.";
-
-        if (any && !exactAllowed) {
-          label = "Estimated Range";
-          value = `$${money(range.min)}–$${money(range.max)}`;
-          sub = pricingDone ? "Add your address to get an exact number." : "Range updates as you answer.";
-        }
-
-        if (any && exactAllowed) {
-          label = "Exact Total";
-          value = `$${money(exact.display_price)}`;
-          sub = "Based on your answers + municipality rules.";
-        }
-
-        return { label, value, sub };
-      }
-
-      async function submitPayload(vq) {
-        const pricingQuestions = (vq || []).filter((q) => q.affects_pricing !== false);
-        const exact = computeExact(cfg, state.answers);
-        const range = computeRange(cfg, state.answers, pricingQuestions);
-
-        const payload = {
-          answers: state.answers,
-          pricing: { exact, range },
-          meta: { url: location.href, ts: new Date().toISOString() },
-        };
-
-        if (!ZAPIER_WEBHOOK_URL || String(ZAPIER_WEBHOOK_URL).includes("PASTE_YOUR_")) {
-          alert("Submitted (dev mode). Add your Zapier URL to send.");
-          return;
-        }
-
-        await fetch(ZAPIER_WEBHOOK_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-
-        alert("Submitted! We'll reach out shortly.");
-      }
-
-      let renderQueued = false;
-      function scheduleRender() {
-        if (renderQueued) return;
-        renderQueued = true;
-        requestAnimationFrame(() => {
-          renderQueued = false;
-          render();
-        });
-      }
-
-      function renderLoading(step, vq) {
-        mount.innerHTML = "";
-
-        const duration = Number(step.duration_ms || 1400);
-        const start = Date.now();
-        const fillId = `loadfill_${step.id}`;
-
-        const pct = vq.length ? Math.round(((state.stepIndex + 1) / vq.length) * 100) : 0;
-
-        const card = mk("div", { class: "card" }, [
-          mk("div", { class: "stepHeader" }, [
-            mk("div", { class: "progressWrap" }, [
-              mk("div", { class: "progressMeta" }, [`Step ${state.stepIndex + 1} of ${vq.length}`]),
-              mk("div", { class: "progressBar" }, [mk("div", { class: "progressFill", style: `width:${pct}%` })]),
-            ]),
-          ]),
-          mk("div", { class: "loading" }, [
-            mk("div", { class: "loadingInner" }, [
-              mk("div", { class: "spinner" }),
-              mk("div", { class: "loadingTitle" }, [step.title || "Checking…"]),
-              step.subtitle ? mk("div", { class: "loadingSub" }, [step.subtitle]) : null,
-              mk("div", { class: "loadBar" }, [mk("div", { id: fillId, class: "loadFill", style: "width:0%" })]),
-            ]),
-          ]),
-        ]);
-
-        mount.appendChild(card);
-
-        const tick = () => {
-          const el = document.getElementById(fillId);
-          if (!el) return;
-          const t = Math.min(1, (Date.now() - start) / duration);
-          const eased = 1 - Math.pow(1 - t, 2);
-          el.style.width = `${Math.min(92, Math.round(eased * 100))}%`;
-          if (t < 1) requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
-
-        return { start, duration, fillId };
-      }
-
-      function render() {
-        persist();
-        mount.innerHTML = "";
-
-        const vq = visibleQuestions();
-        state.stepIndex = Math.max(0, Math.min(state.stepIndex, vq.length - 1));
-
-        const q = vq[state.stepIndex];
-        const isLast = state.stepIndex === vq.length - 1;
-
-        const pct = vq.length ? Math.round(((state.stepIndex + 1) / vq.length) * 100) : 0;
-        const preview = computePreview(vq);
-
-        const container = mk("div", { class: "card" }, [
-          mk("div", { class: "stepHeader" }, [
-            mk("div", { class: "progressWrap" }, [
-              mk("div", { class: "progressMeta" }, [`Step ${state.stepIndex + 1} of ${vq.length}`]),
-              mk("div", { class: "progressBar" }, [mk("div", { class: "progressFill", style: `width:${pct}%` })]),
-            ]),
-            mk("h2", {}, [q?.title || ""]),
-            q?.subtitle ? mk("div", { class: "stepSub" }, [q.subtitle]) : null,
-          ]),
-          mk("div", { id: "step-content" }),
-        ]);
-
-        const content = qs("#step-content", container);
-
-        /* -------- render question -------- */
-        if (q?.type === "single_select") {
-          const opts = q.options || [];
-          const hasImages = opts.some((o) => !!o.image_url);
-
-          const wrap = mk("div", { class: hasImages ? "choicesGrid" : "choicesList" });
-
-          opts.forEach((opt) => {
-            const active = String(state.answers[q.id]) === String(opt.value);
-
-            wrap.appendChild(
-              mk(
-                "div",
-                {
-                  class: `choice ${active ? "active" : ""} ${opt.image_url ? "hasImg" : ""}`,
-                  onClick: () => {
-                    state.answers[q.id] = String(opt.value);
-                    clearPermitOutputs();
-                    scheduleRender();
-                  },
-                },
-                [
-                  mk("div", { class: "choiceMain" }, [
-                    mk("div", { class: "choiceTop" }, [
-                      mk("div", { class: "choiceLabel" }, [opt.label]),
-                      opt.tooltip ? tooltip(opt.tooltip) : null,
-                    ]),
-                    opt.image_url ? mk("img", { class: "oimg", src: opt.image_url, alt: "", loading: "lazy" }) : null,
-                  ]),
-                ]
-              )
-            );
-          });
-
-          content.appendChild(wrap);
-        } else if (q?.type === "form") {
-          const fields = q.fields || [];
-          fields.forEach((f) => {
-            const val = state.answers[f.id] || "";
-            const result = validateField(f, val);
-
-            content.appendChild(
-              mk("div", { class: "field" }, [
-                mk("label", { class: "fieldLabel" }, [f.label || f.id, f.help ? tooltip(f.help) : null]),
-                mk("input", {
-                  type: f.input_type || "text",
-                  value: val,
-                  placeholder: f.placeholder || "",
-                  autocomplete: f.autocomplete || "",
-                  onInput: (e) => {
-                    state.answers[f.id] = e.target.value;
-
-                    // address changes => must re-run permit lookup to regain exact
-                    if (String(f.id).startsWith("addr_")) clearPermitOutputs();
-
-                    scheduleRender();
-                  },
-                }),
-                !result.ok && !isEmpty(val) ? mk("div", { class: "fieldErr" }, [result.msg]) : null,
-              ])
-            );
-          });
-        } else if (q?.type === "content") {
-          content.appendChild(mk("div", { class: "contentBlock", html: q.html || "" }));
-        } else if (q?.type === "summary") {
-          content.appendChild(mk("div", { class: "note" }, ["Review your answers, then continue."]));
-        } else if (q?.type === "submit") {
-          content.appendChild(mk("div", { class: "note" }, [q.note || "Submit your info to lock in this estimate."]));
-        }
-
-        /* -------- nav -------- */
-        const canGoBack = state.stepIndex > 0;
-        const stepOk = isQuestionComplete(q, state.answers);
-        const nextLabel = q?.next_label || (isLast ? (q?.submit_label || "Submit") : "Next");
-
-        container.appendChild(
-          mk("div", { class: "nav" }, [
-            mk(
-              "button",
-              {
-                class: "btn secondary",
-                disabled: !canGoBack,
-                onClick: () => {
-                  clearPermitOutputs();
-                  state.stepIndex = backIndexSkippingTransients(visibleQuestions(), state.stepIndex);
-                  scheduleRender();
-                },
-              },
-              ["Back"]
-            ),
-            mk(
-              "button",
-              {
-                class: "btn",
-                disabled: !stepOk,
-                onClick: async () => {
-                  const vq2 = visibleQuestions();
-                  const current = vq2[state.stepIndex];
-
-                  if (current?.type === "submit") {
-                    try {
-                      await submitPayload(vq2);
-                    } catch (e) {
-                      console.error(e);
-                      alert("Submit failed. Please try again.");
-                    }
-                    return;
-                  }
-
-                  if (state.stepIndex >= vq2.length - 1) return;
-
-                  const next = vq2[state.stepIndex + 1];
-
-                  if (next?.type === "loading_lookup" && next?.transient === true) {
-                    // show loading UI, run lookup, then skip over transient step
-                    const tracker = renderLoading(next, vq2);
-
-                    // clear & re-earn exact
-                    clearPermitOutputs();
-
-                    try {
-                      await runLookup(state, next.lookup);
-                    } catch (e) {
-                      console.warn("Lookup failed:", e);
-                      state.answers.municipality_found = false;
-                    }
-
-                    const el = document.getElementById(tracker.fillId);
-                    if (el) el.style.width = "100%";
-
-                    const elapsed = Date.now() - tracker.start;
-                    const remaining = Math.max(0, tracker.duration - elapsed);
-
-                    setTimeout(() => {
-                      state.stepIndex = state.stepIndex + 2; // skip transient step
-                      scheduleRender();
-                    }, remaining + 250);
-
-                    return;
-                  }
-
-                  state.stepIndex++;
-                  scheduleRender();
-                },
-              },
-              [nextLabel]
-            ),
-          ])
-        );
-
-        /* -------- preview -------- */
-        container.appendChild(
-          mk("div", { class: "preview" }, [
-            mk("div", { class: "previewTop" }, [
-              mk("span", {}, [preview.label]),
-              tooltip("Sample tooltip. You can style .tip / .tipBubble."),
-            ]),
-            mk("div", { class: "previewPrice" }, [preview.value]),
-            mk("div", { class: "previewSub" }, [preview.sub]),
-          ])
-        );
-
-        mount.appendChild(container);
-      }
-
-      scheduleRender();
-    } catch (e) {
-      console.error(e);
-      const mount = document.getElementById(MOUNT_ID);
-      if (mount) mount.innerHTML = "<p>Error loading configuration. Check console.</p>";
+      delete state.answers.permit_fee_usd;
+      delete state.answers.expansion_tank_required;
     }
+
+    function setAnswer(key, value) {
+      const prev = state.answers[key];
+      state.answers[key] = value;
+
+      // If address changes, kill exact until they resubmit address again.
+      if (String(key).startsWith("addr_") && String(prev || "") !== String(value || "")) {
+        invalidateAddressDerived();
+      }
+
+      // If they change the branch root, prune branch answers + history.
+      if (key === "type" && String(prev || "") !== String(value || "")) {
+        delete state.answers.tank_fuel;
+        delete state.answers.tankless_fuel;
+      }
+
+      pruneState(state);
+      persist();
+    }
+
+    function goTo(nextId) {
+      if (!nextId) return;
+      state.currentId = nextId;
+      pruneState(state);
+      persist();
+      render();
+    }
+
+    function back() {
+      const prev = state.history.pop();
+      if (!prev) return;
+      state.currentId = prev;
+      pruneState(state);
+      persist();
+      render();
+    }
+
+    function nextFrom(step) {
+      if (!step) return null;
+
+      if (step.type === "single_select") {
+        const opt = getSelectedOption(step, state.answers);
+        return (opt && opt.next) || step.next || null;
+      }
+
+      return step.next || null;
+    }
+
+    function canShowExact(step) {
+      if (!state.meta.exact_unlocked || !state.meta.after_permit) return false;
+      if (!step) return false;
+      if (step.id === "address_gate") return false;
+      if (step.id === "permit_check") return false;
+      return true;
+    }
+
+    async function runPermitLookup() {
+      const lookup = cfg.lookup || {};
+      const muniUrl = lookup.municipalities_url;
+      if (!muniUrl) return;
+
+      const sig = addressSig(state.answers);
+
+      // Always run when they hit Continue on address (i.e., resubmitted),
+      // but we still store sig so exact is tied to the submitted address.
+      const muni = await loadMunicipalities(muniUrl);
+
+      const matchField = lookup.match_on || "addr_city";
+      const cityRaw = safeStr(state.answers[matchField]);
+      const cityKey = cityRaw.replace(/,\s*TX$/i, "").trim();
+
+      const row = muni?.cities?.[cityKey] || null;
+      const mapping = lookup.write_to || {};
+
+      for (const [rowKey, answerKey] of Object.entries(mapping)) {
+        state.answers[answerKey] = row ? row[rowKey] : null;
+      }
+
+      state.meta.permit_done = true;
+      state.meta.permit_sig = sig;
+      state.meta.exact_unlocked = true;
+      state.meta.after_permit = true;
+
+      persist();
+    }
+
+    async function submit() {
+      const range = computeRange(cfg, state.answers);
+      const exact = state.meta.exact_unlocked ? computeExact(cfg, range, state.answers) : null;
+
+      const payload = {
+        answers: state.answers,
+        pricing: { range, exact },
+        meta: {
+          url: location.href,
+          ts: new Date().toISOString(),
+          lock_hours: cfg?.meta?.lock_hours || null,
+        },
+      };
+
+      if (!ZAPIER_WEBHOOK_URL || String(ZAPIER_WEBHOOK_URL).includes("PASTE_YOUR_")) {
+        alert("Submitted (dev mode). Add your Zapier URL to send.");
+        return;
+      }
+
+      await fetch(ZAPIER_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      alert("Submitted! We'll reach out shortly.");
+    }
+
+    // ---- Render ----
+    let renderQueued = false;
+    function scheduleRender() {
+      if (renderQueued) return;
+      renderQueued = true;
+      requestAnimationFrame(() => {
+        renderQueued = false;
+        render();
+      });
+    }
+
+    function render() {
+      persist();
+      mount.innerHTML = "";
+
+      const step = getQ(state.currentId);
+      if (!step) {
+        mount.appendChild(mk("div", { class: "card" }, [mk("div", { class: "note" }, ["Config error: missing step."])]));
+        return;
+      }
+
+      const range = computeRange(cfg, state.answers);
+      const exact = computeExact(cfg, range, state.answers);
+
+      const showExact = canShowExact(step);
+
+      const previewLabel = showExact ? "Exact Price" : "Estimated Range";
+      const previewValue = showExact ? `$${money(exact)}` : (range.low || range.high ? `$${money(range.low)}–$${money(range.high)}` : "—");
+      const previewSub = showExact ? "Exact price shown after address verification." : "Updates as you answer.";
+
+      const card = mk("div", { class: "card" }, [
+        mk("div", { class: "stepHeader" }, [
+          mk("h2", {}, [step.title || ""]),
+          step.subtitle ? mk("div", { class: "stepSub" }, [step.subtitle]) : null,
+        ]),
+        mk("div", { id: "step-content" }),
+      ]);
+
+      const content = qs("#step-content", card);
+
+      // ---- Step content ----
+      if (step.type === "single_select") {
+        const opts = step.options || [];
+        const hasImages = opts.some((o) => !!o.image_url);
+
+        const wrap = mk("div", { class: hasImages ? "choicesGrid" : "choicesList" });
+
+        opts.forEach((opt) => {
+          const active = String(state.answers[step.id]) === String(opt.value);
+
+          wrap.appendChild(
+            mk(
+              "div",
+              {
+                class: `choice ${active ? "active" : ""} ${opt.image_url ? "hasImg" : ""}`,
+                onClick: () => {
+                  setAnswer(step.id, String(opt.value));
+                  scheduleRender();
+                },
+              },
+              [
+                mk("div", { class: "choiceMain" }, [
+                  mk("div", { class: "choiceTop" }, [
+                    mk("div", { class: "choiceLabel" }, [opt.label]),
+                    opt.tooltip ? tooltip(opt.tooltip) : null,
+                  ]),
+                  opt.image_url ? mk("img", { class: "oimg", src: opt.image_url, alt: "", loading: "lazy" }) : null,
+                ]),
+              ]
+            )
+          );
+        });
+
+        content.appendChild(wrap);
+      } else if (step.type === "form") {
+        (step.fields || []).forEach((f) => {
+          const val = state.answers[f.id] || "";
+          const result = validateField(f, val);
+
+          content.appendChild(
+            mk("div", { class: "field" }, [
+              mk("label", { class: "fieldLabel" }, [f.label || f.id]),
+              mk("input", {
+                type: f.input_type || "text",
+                value: val,
+                placeholder: f.placeholder || "",
+                autocomplete: f.autocomplete || "",
+                onInput: (e) => {
+                  setAnswer(f.id, e.target.value);
+                  scheduleRender();
+                },
+              }),
+              !result.ok && !isEmpty(val) ? mk("div", { class: "fieldErr" }, [result.msg]) : null,
+            ])
+          );
+        });
+      } else if (step.type === "summary") {
+        const disclaimer = cfg?.result_copy?.disclaimer || "";
+        content.appendChild(
+          mk("div", { class: "note" }, [
+            "Review your info, then submit.",
+            disclaimer ? mk("div", { class: "small" }, [disclaimer]) : null,
+          ].filter(Boolean))
+        );
+      } else if (step.type === "submit") {
+        content.appendChild(mk("div", { class: "note" }, [step.subtitle || "Submit to send."]));
+      }
+
+      // ---- Preview ----
+      const disclaimer = cfg?.result_copy?.disclaimer || "";
+      card.appendChild(
+        mk("div", { class: "preview" }, [
+          mk("div", { class: "previewTop" }, [
+            mk("span", {}, [previewLabel]),
+            disclaimer ? tooltip(disclaimer) : null,
+          ]),
+          mk("div", { class: "previewPrice" }, [previewValue]),
+          mk("div", { class: "previewSub" }, [previewSub]),
+        ])
+      );
+
+      // ---- Nav ----
+      const canBack = state.history.length > 0;
+      const ok = isStepComplete(step, state.answers);
+
+      const nav = mk("div", { class: "nav" });
+
+      // Back always skips the loading step because loading is never pushed to history.
+      nav.appendChild(
+        mk(
+          "button",
+          { class: "btn secondary", disabled: !canBack, onClick: back },
+          ["Back"]
+        )
+      );
+
+      // Next label
+      let nextLabel = "Next";
+      if (step.type === "submit") nextLabel = step.submit_label || "Submit";
+      else if (step.id === "address_gate") nextLabel = "Continue";
+      else if (step.type === "summary") nextLabel = "Get My Estimate";
+
+      nav.appendChild(
+        mk(
+          "button",
+          {
+            class: "btn",
+            disabled: !ok,
+            onClick: async () => {
+              const s = getQ(state.currentId);
+              if (!s) return;
+
+              if (s.type === "submit") {
+                try {
+                  await submit();
+                } catch (e) {
+                  console.error(e);
+                  alert("Submit failed. Please try again.");
+                }
+                return;
+              }
+
+              // Address step special behavior:
+              // - show loading screen
+              // - no nav during loading
+              // - only appears when user hits Continue on address
+              if (s.id === "address_gate") {
+                // push address step to history so Back from contact goes here
+                state.history.push(s.id);
+                persist();
+
+                const loadingStep = getQ(s.next); // permit_check
+                if (!loadingStep || loadingStep.type !== "loading_lookup") {
+                  // no loading configured, just go next
+                  goTo(s.next);
+                  return;
+                }
+
+                renderLoading(mount, loadingStep);
+
+                const duration = Number(loadingStep.duration_ms || 1400);
+                const start = Date.now();
+
+                // start fill animation
+                const fill = qs("#loadFill", mount);
+                const tick = () => {
+                  if (!fill) return;
+                  const t = Math.min(1, (Date.now() - start) / duration);
+                  const eased = 1 - Math.pow(1 - t, 2);
+                  fill.style.width = `${Math.min(92, Math.round(eased * 100))}%`;
+                  if (t < 1) requestAnimationFrame(tick);
+                };
+                requestAnimationFrame(tick);
+
+                try {
+                  await runPermitLookup();
+                } catch (e) {
+                  console.warn("Lookup failed:", e);
+                  // still allow forward, but exact won't be meaningful
+                  state.meta.permit_done = false;
+                  state.meta.exact_unlocked = false;
+                  state.meta.after_permit = false;
+                  delete state.answers.permit_fee_usd;
+                  delete state.answers.expansion_tank_required;
+                  persist();
+                }
+
+                // finish and advance after duration
+                const elapsed = Date.now() - start;
+                const remaining = Math.max(0, duration - elapsed);
+
+                setTimeout(() => {
+                  const f = qs("#loadFill", mount);
+                  if (f) f.style.width = "100%";
+                  goTo(loadingStep.next);
+                }, remaining + 200);
+
+                return;
+              }
+
+              // Normal step: push current -> go next
+              state.history.push(s.id);
+              persist();
+
+              const nextId = nextFrom(s);
+              goTo(nextId);
+            },
+          },
+          [nextLabel]
+        )
+      );
+
+      card.appendChild(nav);
+
+      mount.appendChild(card);
+    }
+
+    pruneState(state);
+    persist();
+    render();
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
