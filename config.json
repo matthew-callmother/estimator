@@ -1,50 +1,44 @@
 {
   "meta": {
-    "version": "v3-routing",
-    "lock_hours": 72,
+    "version": "routing-v1",
     "currency": "USD",
-    "start_id": "type"
+    "lock_hours": 72
   },
   "pricing": {
-    "round_to": 25,
-    "exact_mode": "mid"
-  },
-  "lookup": {
-    "municipalities_url": "https://matthew-callmother.github.io/estimator/municipalities-dfw.json",
-    "match_on": "addr_city",
-    "write_to": {
-      "permit_fee_usd": "permit_fee_usd",
-      "expansion_tank_required": "expansion_tank_required"
+    "exact_requires": [
+      "addr_street",
+      "addr_city",
+      "addr_state",
+      "addr_zip"
+    ],
+    "safety": {
+      "round_to": 25
     },
-    "expansion_tank_addon": 350
+    "lookup_addons": {
+      "expansion_tank_required": 350
+    }
   },
+  "start": "type",
+  "address_gate_id": "address_gate",
   "questions": [
     {
       "id": "type",
       "type": "single_select",
       "title": "What kind of water heater do you have?",
       "subtitle": "This sets the baseline.",
-      "tooltip": "If you\u2019re unsure, pick the closest match.",
-      "next": "address_gate",
       "options": [
         {
           "value": "tank",
           "label": "Tank",
           "image_url": "https://cdn.prod.website-files.com/678144dfb4c536263e714199/6959542f801a71c999749c88_conventional.png",
-          "price": {
-            "low": 3400,
-            "high": 4200
-          },
+          "pricing": { "low": 3400, "high": 4200, "exact": 4200 },
           "next": "tank_fuel"
         },
         {
           "value": "tankless",
           "label": "Tankless",
           "image_url": "https://cdn.prod.website-files.com/678144dfb4c536263e714199/695954b2a011b846bd420fac_tankless-wireframe.png",
-          "price": {
-            "low": 6400,
-            "high": 7900
-          },
+          "pricing": { "low": 6400, "high": 7900, "exact": 7900 },
           "next": "tankless_fuel"
         }
       ]
@@ -52,108 +46,46 @@
     {
       "id": "tank_fuel",
       "type": "single_select",
-      "title": "What fuel is your tank water heater?",
-      "subtitle": "Fuel affects hookups and parts.",
-      "next": "location",
+      "title": "Is your tank unit gas or electric?",
+      "subtitle": "This helps match labor + parts.",
       "options": [
-        {
-          "value": "gas",
-          "label": "Gas",
-          "price": {
-            "low": 0,
-            "high": 0
-          }
-        },
-        {
-          "value": "electric",
-          "label": "Electric",
-          "price": {
-            "low": 0,
-            "high": 0
-          }
-        },
-        {
-          "value": "not_sure",
-          "label": "Not sure",
-          "price": {
-            "low": 200,
-            "high": 350
-          }
-        }
+        { "value": "gas", "label": "Gas", "pricing": { "low": 0, "high": 0, "exact": 0 }, "next": "location" },
+        { "value": "electric", "label": "Electric", "pricing": { "low": 0, "high": 0, "exact": 0 }, "next": "location" },
+        { "value": "not_sure", "label": "Not sure", "pricing": { "low": 250, "high": 350, "exact": 350 }, "next": "location" }
       ]
     },
     {
       "id": "tankless_fuel",
       "type": "single_select",
-      "title": "What fuel is your tankless water heater?",
-      "subtitle": "Fuel affects venting and electrical work.",
-      "next": "location",
+      "title": "Is your tankless unit gas or electric?",
+      "subtitle": "This helps match venting + electrical requirements.",
       "options": [
-        {
-          "value": "gas",
-          "label": "Gas",
-          "price": {
-            "low": 0,
-            "high": 0
-          }
-        },
-        {
-          "value": "electric",
-          "label": "Electric",
-          "price": {
-            "low": 0,
-            "high": 0
-          }
-        },
-        {
-          "value": "not_sure",
-          "label": "Not sure",
-          "price": {
-            "low": 250,
-            "high": 450
-          }
-        }
+        { "value": "gas", "label": "Gas", "pricing": { "low": 0, "high": 0, "exact": 0 }, "next": "tankless_venting" },
+        { "value": "electric", "label": "Electric", "pricing": { "low": 0, "high": 0, "exact": 0 }, "next": "location" },
+        { "value": "not_sure", "label": "Not sure", "pricing": { "low": 250, "high": 350, "exact": 350 }, "next": "location" }
+      ]
+    },
+    {
+      "id": "tankless_venting",
+      "type": "single_select",
+      "title": "What venting does your tankless use?",
+      "subtitle": "Venting can materially change parts + labor.",
+      "options": [
+        { "value": "standard", "label": "Standard vent", "pricing": { "low": 0, "high": 0, "exact": 0 }, "next": "location" },
+        { "value": "power_vent", "label": "Power vent", "pricing": { "low": 750, "high": 950, "exact": 950 }, "next": "location" },
+        { "value": "not_sure", "label": "Not sure", "pricing": { "low": 300, "high": 450, "exact": 450 }, "next": "location" }
       ]
     },
     {
       "id": "location",
       "type": "single_select",
       "title": "Where is the water heater installed?",
-      "subtitle": "Access and safety change install time.",
-      "next": "access",
+      "subtitle": "Access and safety requirements can change install time.",
       "options": [
-        {
-          "value": "garage",
-          "label": "Garage",
-          "price": {
-            "low": 0,
-            "high": 0
-          }
-        },
-        {
-          "value": "attic",
-          "label": "Attic",
-          "price": {
-            "low": 450,
-            "high": 650
-          }
-        },
-        {
-          "value": "closet",
-          "label": "Closet",
-          "price": {
-            "low": 300,
-            "high": 450
-          }
-        },
-        {
-          "value": "other",
-          "label": "Other",
-          "price": {
-            "low": 350,
-            "high": 550
-          }
-        }
+        { "value": "garage", "label": "Garage", "pricing": { "low": 0, "high": 0, "exact": 0 }, "next": "access" },
+        { "value": "attic", "label": "Attic", "pricing": { "low": 450, "high": 650, "exact": 650 }, "next": "access" },
+        { "value": "closet", "label": "Closet", "pricing": { "low": 300, "high": 450, "exact": 450 }, "next": "access" },
+        { "value": "other", "label": "Other", "pricing": { "low": 350, "high": 550, "exact": 550 }, "next": "access" }
       ]
     },
     {
@@ -161,32 +93,10 @@
       "type": "single_select",
       "title": "How easy is the access to the heater?",
       "subtitle": "Tight spaces take longer and need more care.",
-      "next": "urgency",
       "options": [
-        {
-          "value": "easy",
-          "label": "Easy",
-          "price": {
-            "low": 0,
-            "high": 0
-          }
-        },
-        {
-          "value": "tight",
-          "label": "Tight",
-          "price": {
-            "low": 350,
-            "high": 550
-          }
-        },
-        {
-          "value": "not_sure",
-          "label": "Not sure",
-          "price": {
-            "low": 200,
-            "high": 300
-          }
-        }
+        { "value": "easy", "label": "Easy", "pricing": { "low": 0, "high": 0, "exact": 0 }, "next": "urgency" },
+        { "value": "tight", "label": "Tight", "pricing": { "low": 350, "high": 550, "exact": 550 }, "next": "urgency" },
+        { "value": "not_sure", "label": "Not sure", "pricing": { "low": 200, "high": 300, "exact": 300 }, "next": "urgency" }
       ]
     },
     {
@@ -194,139 +104,72 @@
       "type": "single_select",
       "title": "How soon do you need hot water back?",
       "subtitle": "Timing helps set expectations.",
-      "next": "address_gate",
       "options": [
-        {
-          "value": "asap",
-          "label": "ASAP (no hot water)",
-          "price": {
-            "low": 150,
-            "high": 250
-          }
-        },
-        {
-          "value": "week",
-          "label": "This week",
-          "price": {
-            "low": 0,
-            "high": 0
-          }
-        },
-        {
-          "value": "month",
-          "label": "1\u20134 weeks",
-          "price": {
-            "low": 0,
-            "high": 0
-          }
-        }
+        { "value": "asap", "label": "ASAP (no hot water)", "pricing": { "low": 150, "high": 250, "exact": 250 }, "next": "address_gate" },
+        { "value": "week", "label": "This week", "pricing": { "low": 0, "high": 0, "exact": 0 }, "next": "address_gate" },
+        { "value": "month", "label": "1–4 weeks", "pricing": { "low": 0, "high": 0, "exact": 0 }, "next": "address_gate" }
       ]
     },
     {
       "id": "address_gate",
       "type": "form",
-      "title": "Enter your address to get an exact price",
-      "subtitle": "We use this to look up permit + municipality requirements.",
-      "next": "permit_check",
+      "title": "Want an exact price?",
+      "subtitle": "Enter your address so we can verify permit requirements.",
       "fields": [
-        {
-          "id": "addr_street",
-          "label": "Street",
-          "input_type": "text",
-          "required": true,
-          "placeholder": "123 Main St",
-          "autocomplete": "street-address"
-        },
-        {
-          "id": "addr_city",
-          "label": "City",
-          "input_type": "text",
-          "required": true,
-          "placeholder": "Frisco",
-          "autocomplete": "address-level2"
-        },
-        {
-          "id": "addr_state",
-          "label": "State",
-          "input_type": "text",
-          "required": true,
-          "placeholder": "TX",
-          "autocomplete": "address-level1",
-          "pattern": "^[A-Za-z]{2}$",
-          "pattern_msg": "Use a 2-letter state code (e.g., TX)"
-        },
-        {
-          "id": "addr_zip",
-          "label": "Zip",
-          "input_type": "text",
-          "required": true,
-          "placeholder": "75034",
-          "autocomplete": "postal-code",
-          "pattern": "^\\d{5}(-\\d{4})?$",
-          "pattern_msg": "Use a 5-digit ZIP"
-        }
-      ]
+        { "id": "addr_street", "label": "Street", "input_type": "text", "required": true, "placeholder": "123 Main St", "autocomplete": "street-address" },
+        { "id": "addr_city", "label": "City", "input_type": "text", "required": true, "placeholder": "Frisco", "autocomplete": "address-level2" },
+        { "id": "addr_state", "label": "State", "input_type": "text", "required": true, "placeholder": "TX", "autocomplete": "address-level1", "pattern": "^[A-Za-z]{2}$", "pattern_msg": "Use a 2-letter state code (e.g., TX)" },
+        { "id": "addr_zip", "label": "Zip", "input_type": "text", "required": true, "placeholder": "75034", "autocomplete": "postal-code", "pattern": "^\\d{5}(-\\d{4})?$", "pattern_msg": "Use a 5-digit ZIP" }
+      ],
+      "next_label": "Continue",
+      "next": "permit_check"
     },
     {
       "id": "permit_check",
       "type": "loading_lookup",
-      "title": "Checking permit + code requirements\u2026",
-      "subtitle": "Looking up your city\u2019s requirements.",
-      "duration_ms": 2200,
+      "title": "Checking permit + code requirements…",
+      "subtitle": "Verifying municipality permit fees and requirements for your address.",
+      "duration_ms": 2800,
+      "lookup": {
+        "source": "municipalities",
+        "match_on": "addr_city",
+        "write_to": {
+          "permit_fee_usd": "permit_fee_usd",
+          "expansion_tank_required": "expansion_tank_required"
+        }
+      },
       "next": "contact_gate"
     },
     {
       "id": "contact_gate",
       "type": "form",
       "title": "Lock in this estimate for 72 hours",
-      "subtitle": "Where should we send it?",
-      "next": "results",
+      "subtitle": "Submit your contact info to lock it in.",
       "fields": [
-        {
-          "id": "contact_name",
-          "label": "Name",
-          "input_type": "text",
-          "required": true,
-          "placeholder": "Full name",
-          "autocomplete": "name"
-        },
-        {
-          "id": "contact_phone",
-          "label": "Phone",
-          "input_type": "tel",
-          "required": true,
-          "type": "phone",
-          "min_digits": 10,
-          "placeholder": "(555) 555-5555",
-          "autocomplete": "tel"
-        },
-        {
-          "id": "contact_email",
-          "label": "Email",
-          "input_type": "email",
-          "required": true,
-          "type": "email",
-          "placeholder": "you@email.com",
-          "autocomplete": "email"
-        }
-      ]
+        { "id": "contact_name", "label": "Name", "input_type": "text", "required": true, "placeholder": "Full name", "autocomplete": "name" },
+        { "id": "contact_phone", "label": "Phone", "input_type": "tel", "required": true, "type": "phone", "min_digits": 10, "placeholder": "(555) 555-5555", "autocomplete": "tel" },
+        { "id": "contact_email", "label": "Email", "input_type": "email", "required": true, "type": "email", "placeholder": "you@email.com", "autocomplete": "email" }
+      ],
+      "next_label": "Review",
+      "next": "results_preview"
     },
     {
-      "id": "results",
+      "id": "results_preview",
       "type": "summary",
       "title": "Your estimate",
-      "subtitle": "Review and submit.",
+      "subtitle": "Review your estimate before submitting.",
+      "next_label": "Get My Estimate",
       "next": "submit"
     },
     {
       "id": "submit",
       "type": "submit",
       "title": "Submit",
-      "subtitle": "We\u2019ll reach out to confirm details.",
+      "subtitle": "We’ll hold this estimate for 72 hours.",
       "submit_label": "Submit"
     }
   ],
   "result_copy": {
-    "disclaimer": "Estimate is based on your selections. Final price can change if conditions differ on-site."
+    "disclaimer": "This is an estimate based on your selections. Final price can change if conditions differ on-site."
   }
 }
