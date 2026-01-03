@@ -174,7 +174,8 @@
       const opt = getOption(q, v);
       if (!opt?.pricing) continue;
 
-      const p = opt.pricing || {};
+      const p = opt.pricing || opt.price || {};
+
       const l = Number(p.low ?? 0) || 0;
       const h = Number(p.high ?? l) || 0;
       const e = Number(p.exact ?? h) || 0;
@@ -670,3 +671,4 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 })();
+
