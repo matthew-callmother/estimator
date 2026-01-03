@@ -1,17 +1,24 @@
 (function () {
   "use strict";
 
-  // ---- Config ----
   const ZAPIER_WEBHOOK_URL = "PASTE_YOUR_ZAPIER_CATCH_HOOK_URL_HERE";
   const CONFIG_URL = "https://matthew-callmother.github.io/estimator/config.json";
+  const MUNICIPALITIES_URL = "https://matthew-callmother.github.io/estimator/municipalities-dfw.json";
+
   const MOUNT_ID = "wh-estimator";
-  const STORAGE_KEY = "wh_estimator_v3_state";
+  const STORAGE_KEY = "wh_estimator_routing_state";
 
-  // ---- Helpers ----
+  /* ---------------- Helpers ---------------- */
   const qs = (sel, root = document) => root.querySelector(sel);
+  const money = (n) => Math.round(Number(n) || 0).toLocaleString();
+  const normalizePhone = (s) => String(s || "").replace(/\D/g, "");
+  const isEmpty = (v) => v === null || v === undefined || String(v).trim() === "";
+  const safeStr = (v) => String(v == null ? "" : v).trim();
 
+  // FIX: mk() now ignores null/undefined/false and flattens arrays
   const mk = (tag, attrs = {}, children = []) => {
     const el = document.createElement(tag);
+
     for (const [k, v] of Object.entries(attrs || {})) {
       if (k === "class") el.className = v;
       else if (k === "html") el.innerHTML = v;
@@ -22,15 +29,23 @@
         else el.removeAttribute(k);
       } else if (v !== null && v !== undefined) el.setAttribute(k, String(v));
     }
-    for (const c of children) el.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+
+    const flat = [];
+    const push = (c) => {
+      if (c === null || c === undefined || c === false) return;
+      if (Array.isArray(c)) c.forEach(push);
+      else flat.push(c);
+    };
+    push(children);
+
+    for (const c of flat) {
+      if (c instanceof Node) el.appendChild(c);
+      else el.appendChild(document.createTextNode(String(c)));
+    }
     return el;
   };
 
-  const money = (n) => Math.round(Number(n) || 0).toLocaleString();
-  const normPhone = (s) => String(s || "").replace(/\D/g, "");
-  const isEmpty = (v) => v === null || v === undefined || String(v).trim() === "";
-
-  // ---- Tooltip ----
+  /* ---------------- Tooltip ---------------- */
   function tooltip(text) {
     if (!text) return null;
 
@@ -60,37 +75,147 @@
     return wrap;
   }
 
-  // ---- Lookup (municipalities) ----
-  let MUNI_CACHE = null;
-
-  async function loadMunicipalities(url) {
-    if (MUNI_CACHE) return MUNI_CACHE;
+  /* ---------------- Data Loading ---------------- */
+  async function fetchJSON(url) {
     const res = await fetch(url, { cache: "no-store" });
-    MUNI_CACHE = await res.json();
-    return MUNI_CACHE;
+    if (!res.ok) throw new Error(`Failed to load ${url}: ${res.status}`);
+    return await res.json();
   }
 
-  function safeStr(v) {
-    return String(v == null ? "" : v).trim();
+  let MUNICACHE = null;
+  async function loadMunicipalities() {
+    if (MUNICACHE) return MUNICACHE;
+    MUNICACHE = await fetchJSON(MUNICIPALITIES_URL);
+    return MUNICACHE;
   }
 
-  function addressSig(answers) {
-    return [
-      safeStr(answers.addr_street).toLowerCase(),
-      safeStr(answers.addr_city).toLowerCase(),
-      safeStr(answers.addr_state).toLowerCase(),
-      safeStr(answers.addr_zip).toLowerCase(),
-    ].join("|");
+  function normalizeCityName(raw, muni) {
+    const s = safeStr(raw);
+    if (!s) return "";
+    const aliased = muni?.aliases?.[s] || s;
+    return aliased.replace(/,\s*TX$/i, "").trim();
   }
 
-  // ---- Validation ----
+  function computeAddressSig(cfg, answers) {
+    const req = cfg?.pricing?.exact_requires || ["addr_street", "addr_city", "addr_state", "addr_zip"];
+    const parts = req.map((k) => safeStr(answers[k]).toLowerCase());
+    return parts.join("|");
+  }
+
+  /* ---------------- State ---------------- */
+  function defaultState() {
+    return {
+      // current question id
+      currentId: null,
+      // answers store: questionId -> optionValue, plus form fields by id
+      answers: {},
+      // routing history stack of question ids (for Back)
+      history: [],
+      // meta flags
+      meta: {
+        // permit lookup completion for current address signature
+        permit_done: false,
+        permit_sig: null,
+        // whether user has submitted address step (so exact is only after submit + lookup)
+        address_submitted_sig: null
+      }
+    };
+  }
+
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return defaultState();
+      const parsed = JSON.parse(raw);
+      return {
+        ...defaultState(),
+        ...parsed,
+        meta: { ...defaultState().meta, ...(parsed.meta || {}) }
+      };
+    } catch {
+      return defaultState();
+    }
+  }
+
+  function saveState(state) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  /* ---------------- Config helpers ---------------- */
+  function indexQuestions(cfg) {
+    const map = new Map();
+    (cfg.questions || []).forEach((q) => map.set(q.id, q));
+    return map;
+  }
+
+  function getQuestion(qmap, id) {
+    return qmap.get(id) || null;
+  }
+
+  function getOption(q, value) {
+    return (q?.options || []).find((o) => String(o.value) === String(value)) || null;
+  }
+
+  /* ---------------- Pricing (simple: sum of selected options) ----------------
+     - Each selected option may include:
+       pricing: { low: number, high: number, exact: number }
+     - Range shown until address submitted + lookup finished
+     - Exact shown only after address submit + lookup complete AND on steps AFTER address
+  */
+  function sumPricing(cfg, qmap, state) {
+    let low = 0, high = 0, exact = 0;
+
+    const selectedOptionPricing = [];
+
+    for (const q of (cfg.questions || [])) {
+      if (q.type !== "single_select") continue;
+      const v = state.answers[q.id];
+      if (isEmpty(v)) continue;
+      const opt = getOption(q, v);
+      if (!opt?.pricing) continue;
+
+      const p = opt.pricing || {};
+      const l = Number(p.low ?? 0) || 0;
+      const h = Number(p.high ?? l) || 0;
+      const e = Number(p.exact ?? h) || 0;
+
+      low += l;
+      high += h;
+      exact += e;
+
+      selectedOptionPricing.push({ qid: q.id, value: v, low: l, high: h, exact: e });
+    }
+
+    // permit / address-based add-ons (only apply when permit_done true for current address)
+    if (state.meta.permit_done && state.meta.permit_sig === computeAddressSig(cfg, state.answers)) {
+      const fee = Number(state.answers.permit_fee_usd || 0) || 0;
+      low += fee; high += fee; exact += fee;
+
+      if (state.answers.expansion_tank_required === true) {
+        const addon = Number(cfg?.pricing?.lookup_addons?.expansion_tank_required || 0) || 0;
+        low += addon; high += addon; exact += addon;
+      }
+    }
+
+    const roundTo = Number(cfg?.pricing?.safety?.round_to || 25) || 25;
+    const round = (n) => Math.round(n / roundTo) * roundTo;
+
+    return {
+      low: round(low),
+      high: round(high),
+      exact: round(exact),
+      items: selectedOptionPricing
+    };
+  }
+
+  /* ---------------- Validation ---------------- */
   function validateField(field, rawValue) {
     const v = rawValue == null ? "" : String(rawValue);
 
     if (field.required && isEmpty(v)) return { ok: false, msg: "Required" };
 
     if (!isEmpty(v) && field.type === "phone") {
-      if (normPhone(v).length < (field.min_digits || 10)) return { ok: false, msg: "Enter a valid phone" };
+      if (normalizePhone(v).length < (field.min_digits || 10)) return { ok: false, msg: "Enter a valid phone" };
     }
 
     if (!isEmpty(v) && field.type === "email") {
@@ -105,13 +230,13 @@
     return { ok: true, msg: "" };
   }
 
-  function isStepComplete(step, answers) {
-    if (!step) return true;
+  function isQuestionComplete(q, answers) {
+    if (!q) return true;
 
-    if (step.type === "single_select") return !isEmpty(answers[step.id]);
+    if (q.type === "single_select") return !isEmpty(answers[q.id]);
 
-    if (step.type === "form") {
-      for (const f of step.fields || []) {
+    if (q.type === "form") {
+      for (const f of q.fields || []) {
         const r = validateField(f, answers[f.id]);
         if (!r.ok) return false;
       }
@@ -121,231 +246,324 @@
     return true;
   }
 
-  // ---- Routing guards ----
-  function isAllowedQuestionId(id, answers) {
-    if (id === "tank_fuel") return answers.type === "tank";
-    if (id === "tankless_fuel") return answers.type === "tankless";
-    return true;
+  /* ---------------- Address invalidation ---------------- */
+  function invalidatePermit(cfg, state) {
+    state.meta.permit_done = false;
+    state.meta.permit_sig = null;
+    state.meta.address_submitted_sig = null;
+
+    // clear lookup outputs
+    const lookupWrites = ["permit_fee_usd", "expansion_tank_required", "municipality_city", "municipality_found"];
+    lookupWrites.forEach((k) => delete state.answers[k]);
   }
 
-  function pruneState(state) {
-    // remove answers that no longer make sense
-    if (state.answers.type === "tank") delete state.answers.tankless_fuel;
-    if (state.answers.type === "tankless") delete state.answers.tank_fuel;
+  /* ---------------- Lookup runner ---------------- */
+  async function runPermitLookup(cfg, state, lookupQuestion) {
+    const muni = await loadMunicipalities();
+    const city = normalizeCityName(state.answers.addr_city, muni);
+    const row = muni?.cities?.[city] || null;
 
-    // prune history
-    state.history = (state.history || []).filter((id) => isAllowedQuestionId(id, state.answers));
-
-    // if current id is not allowed anymore, send them to the start
-    if (!isAllowedQuestionId(state.currentId, state.answers)) state.currentId = "type";
-  }
-
-  // ---- Pricing (simple: only what the user selected) ----
-  function getSelectedOption(step, answers) {
-    const val = answers[step.id];
-    if (isEmpty(val)) return null;
-    return (step.options || []).find((o) => String(o.value) === String(val)) || null;
-  }
-
-  function computeRange(cfg, answers) {
-    let low = 0;
-    let high = 0;
-
-    for (const q of cfg.questions || []) {
-      if (q.type !== "single_select") continue;
-      const opt = getSelectedOption(q, answers);
-      if (!opt || !opt.price) continue;
-
-      low += Number(opt.price.low) || 0;
-      high += Number(opt.price.high) || 0;
+    // write outputs to answers
+    const mapping = lookupQuestion?.lookup?.write_to || {};
+    for (const [rowKey, answerKey] of Object.entries(mapping)) {
+      state.answers[answerKey] = row ? row[rowKey] : null;
     }
+    state.answers.municipality_city = row ? city : city || null;
+    state.answers.municipality_found = !!row;
 
-    const roundTo = Number(cfg?.pricing?.round_to) || 25;
-    low = Math.round(low / roundTo) * roundTo;
-    high = Math.round(high / roundTo) * roundTo;
-
-    return { low, high };
+    state.meta.permit_done = true;
+    state.meta.permit_sig = computeAddressSig(cfg, state.answers);
   }
 
-  function computeExact(cfg, range, answers) {
-    // exact is ONLY available after permit lookup completes
-    const mode = String(cfg?.pricing?.exact_mode || "mid").toLowerCase();
-    let base = 0;
-
-    if (mode === "low") base = range.low;
-    else if (mode === "high") base = range.high;
-    else base = (range.low + range.high) / 2;
-
-    const permit = Number(answers.permit_fee_usd) || 0;
-    const addon = answers.expansion_tank_required === true ? Number(cfg?.lookup?.expansion_tank_addon) || 0 : 0;
-
-    const roundTo = Number(cfg?.pricing?.round_to) || 25;
-    let exact = base + permit + addon;
-    exact = Math.round(exact / roundTo) * roundTo;
-
-    return exact;
-  }
-
-  // ---- Loading screen ----
-  function renderLoading(mount, step, pct) {
-    mount.innerHTML = "";
-
-    const card = mk("div", { class: "card" }, [
-      mk("div", { class: "stepHeader" }, [
-        mk("div", { class: "progressWrap" }, [
-          mk("div", { class: "progressMeta" }, [pct ? `Progress ${pct}%` : ""]),
-          mk("div", { class: "progressBar" }, [mk("div", { class: "progressFill", style: `width:${pct || 0}%` })]),
-        ]),
-      ]),
-      mk("div", { class: "loading" }, [
-        mk("div", { class: "loadingInner" }, [
-          mk("div", { class: "spinner" }),
-          mk("div", { class: "loadingTitle" }, [step.title || "Working…"]),
-          step.subtitle ? mk("div", { class: "loadingSub" }, [step.subtitle]) : null,
-          mk("div", { class: "loadBar" }, [mk("div", { id: "loadFill", class: "loadFill", style: "width:0%" })]),
-        ]),
-      ]),
-    ]);
-
-    mount.appendChild(card);
-
-    const fill = qs("#loadFill", mount);
-    if (fill) fill.style.width = "8%";
-  }
-
-  // ---- Main ----
+  /* ---------------- Rendering ---------------- */
   async function boot() {
     const mount = document.getElementById(MOUNT_ID);
     if (!mount) return;
 
-    const cfg = await (await fetch(CONFIG_URL, { cache: "no-store" })).json();
+    let cfg, qmap;
+    try {
+      cfg = await fetchJSON(CONFIG_URL);
+      qmap = indexQuestions(cfg);
+    } catch (e) {
+      console.error(e);
+      mount.innerHTML = "<p>Error loading configuration. Check console.</p>";
+      return;
+    }
 
-    const byId = new Map((cfg.questions || []).map((q) => [q.id, q]));
-    const getQ = (id) => byId.get(id) || null;
+    const state = loadState();
 
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    // set initial current question
+    if (!state.currentId) {
+      state.currentId = cfg.start || (cfg.questions?.[0]?.id ?? null);
+    }
+    if (!state.currentId) {
+      mount.innerHTML = "<p>No questions configured.</p>";
+      return;
+    }
 
-    const state = {
-      currentId: saved.currentId || cfg?.meta?.start_id || (cfg.questions?.[0]?.id || null),
-      answers: saved.answers || {},
-      history: saved.history || [],
-      meta: saved.meta || {
-        permit_done: false,
-        permit_sig: null,
-        exact_unlocked: false,
-        after_permit: false
-      },
+    const getStepIndex = () => {
+      // purely for progress bar; uses history + current
+      const path = [...state.history, state.currentId];
+      return { i: path.length, total: Math.max(path.length, 1) };
     };
 
-    const persist = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    let renderQueued = false;
+    const scheduleRender = () => {
+      if (renderQueued) return;
+      renderQueued = true;
+      requestAnimationFrame(() => {
+        renderQueued = false;
+        render();
+      });
+    };
 
-    function invalidateAddressDerived() {
-      state.meta.permit_done = false;
-      state.meta.permit_sig = null;
-      state.meta.exact_unlocked = false;
-      state.meta.after_permit = false;
+    function computePreviewLabel(pr) {
+      const disclaimer = cfg?.result_copy?.disclaimer || "";
+      const afterAddressSubmit =
+        state.meta.address_submitted_sig &&
+        state.meta.address_submitted_sig === computeAddressSig(cfg, state.answers);
 
-      delete state.answers.permit_fee_usd;
-      delete state.answers.expansion_tank_required;
-    }
+      const exactReady =
+        afterAddressSubmit &&
+        state.meta.permit_done &&
+        state.meta.permit_sig === computeAddressSig(cfg, state.answers);
 
-    function setAnswer(key, value) {
-      const prev = state.answers[key];
-      state.answers[key] = value;
+      // exact only shown after permit lookup AND not while sitting on address gate
+      const isOnAddressGate = state.currentId === cfg.address_gate_id;
 
-      // If address changes, kill exact until they resubmit address again.
-      if (String(key).startsWith("addr_") && String(prev || "") !== String(value || "")) {
-        invalidateAddressDerived();
+      if (exactReady && !isOnAddressGate) {
+        return {
+          mode: "exact",
+          label: "Exact Total",
+          value: `$${money(pr.exact)}`,
+          sub: "Exact price shown after address verification.",
+          disclaimer
+        };
       }
 
-      // If they change the branch root, prune branch answers + history.
-      if (key === "type" && String(prev || "") !== String(value || "")) {
-        delete state.answers.tank_fuel;
-        delete state.answers.tankless_fuel;
+      if (pr.low === 0 && pr.high === 0) {
+        return {
+          mode: "empty",
+          label: "Estimated Range",
+          value: "—",
+          sub: "Answer a few questions to see your range.",
+          disclaimer
+        };
       }
 
-      pruneState(state);
-      persist();
+      return {
+        mode: "range",
+        label: "Estimated Range",
+        value: `$${money(pr.low)}–$${money(pr.high)}`,
+        sub: "Range updates as you go. Add your address to get an exact number.",
+        disclaimer
+      };
     }
 
-    function goTo(nextId) {
+    function renderSingleSelect(q, content) {
+      const opts = q.options || [];
+      const hasImages = opts.some((o) => !!o.image_url);
+      const wrap = mk("div", { class: hasImages ? "choicesGrid" : "choicesList" });
+
+      opts.forEach((opt) => {
+        const active = String(state.answers[q.id]) === String(opt.value);
+
+        wrap.appendChild(
+          mk(
+            "div",
+            {
+              class: `choice ${active ? "active" : ""} ${opt.image_url ? "hasImg" : ""}`,
+              onClick: () => {
+                state.answers[q.id] = String(opt.value);
+
+                // selecting an option can change routing; if it does, we still stay on this step
+                saveState(state);
+                scheduleRender();
+              }
+            },
+            [
+              mk("div", { class: "choiceMain" }, [
+                mk("div", { class: "choiceTop" }, [
+                  mk("div", { class: "choiceLabel" }, [opt.label]),
+                  opt.tooltip ? tooltip(opt.tooltip) : null
+                ]),
+                opt.image_url ? mk("img", { class: "oimg", src: opt.image_url, alt: "", loading: "lazy" }) : null
+              ])
+            ]
+          )
+        );
+      });
+
+      content.appendChild(wrap);
+    }
+
+    function renderForm(q, content) {
+      (q.fields || []).forEach((f) => {
+        const val = state.answers[f.id] || "";
+        const result = validateField(f, val);
+
+        content.appendChild(
+          mk("div", { class: "field" }, [
+            mk("label", { class: "fieldLabel" }, [f.label || f.id, f.help ? tooltip(f.help) : null]),
+            mk("input", {
+              type: f.input_type || "text",
+              value: val,
+              placeholder: f.placeholder || "",
+              autocomplete: f.autocomplete || "",
+              onInput: (e) => {
+                state.answers[f.id] = e.target.value;
+
+                if (String(f.id).startsWith("addr_")) {
+                  invalidatePermit(cfg, state);
+                }
+
+                saveState(state);
+                scheduleRender();
+              }
+            }),
+            !result.ok && !isEmpty(val) ? mk("div", { class: "fieldErr" }, [result.msg]) : null
+          ])
+        );
+      });
+    }
+
+    function renderLoadingStep(q) {
+      mount.innerHTML = "";
+
+      const duration = Number(q.duration_ms || 1600);
+      const start = Date.now();
+      const fillId = `loadfill_${q.id}`;
+
+      const { i, total } = getStepIndex();
+      const pct = total ? Math.round((i / total) * 100) : 0;
+
+      const card = mk("div", { class: "card" }, [
+        mk("div", { class: "stepHeader" }, [
+          mk("div", { class: "progressWrap" }, [
+            mk("div", { class: "progressMeta" }, [`Step ${i} of ${total}`]),
+            mk("div", { class: "progressBar" }, [mk("div", { class: "progressFill", style: `width:${pct}%` })])
+          ])
+        ]),
+        mk("div", { class: "loading" }, [
+          mk("div", { class: "loadingInner" }, [
+            mk("div", { class: "spinner" }),
+            mk("div", { class: "loadingTitle" }, [q.title || "Checking…"]),
+            q.subtitle ? mk("div", { class: "loadingSub" }, [q.subtitle]) : null,
+            mk("div", { class: "loadBar" }, [mk("div", { id: fillId, class: "loadFill", style: "width:0%" })])
+          ])
+        ])
+      ]);
+
+      mount.appendChild(card);
+
+      const tick = () => {
+        const el = document.getElementById(fillId);
+        if (!el) return;
+        const t = Math.min(1, (Date.now() - start) / duration);
+        const eased = 1 - Math.pow(1 - t, 2);
+        el.style.width = `${Math.min(92, Math.round(eased * 100))}%`;
+        if (t < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+
+      return { start, duration, fillId };
+    }
+
+    async function handleNext(q) {
+      const current = q;
+
+      // submit
+      if (current.type === "submit") {
+        await submitPayload();
+        return;
+      }
+
+      // validate
+      if (!isQuestionComplete(current, state.answers)) return;
+
+      // address gate special: mark submitted sig
+      if (current.id === cfg.address_gate_id) {
+        state.meta.address_submitted_sig = computeAddressSig(cfg, state.answers);
+      }
+
+      // determine next id:
+      let nextId = current.next || null;
+
+      // option-level next override
+      if (current.type === "single_select") {
+        const v = state.answers[current.id];
+        const opt = getOption(current, v);
+        if (opt?.next) nextId = opt.next;
+      }
+
       if (!nextId) return;
+
+      // if next is loading lookup, show it (not part of history), run lookup, then auto-advance to its next
+      const nextQ = getQuestion(qmap, nextId);
+      if (nextQ?.type === "loading_lookup") {
+        // render loading (no nav)
+        const tracker = renderLoadingStep(nextQ);
+
+        try {
+          await runPermitLookup(cfg, state, nextQ);
+        } catch (e) {
+          console.warn("Lookup failed:", e);
+          state.meta.permit_done = false;
+          state.meta.permit_sig = null;
+          state.answers.municipality_found = false;
+        }
+
+        const fill = document.getElementById(tracker.fillId);
+        if (fill) fill.style.width = "100%";
+
+        const elapsed = Date.now() - tracker.start;
+        const remaining = Math.max(0, tracker.duration - elapsed);
+
+        setTimeout(() => {
+          // advance to loading's next
+          const afterId = nextQ.next || null;
+          if (afterId) {
+            // push CURRENT into history, not the loading step
+            state.history.push(state.currentId);
+            state.currentId = afterId;
+          }
+          saveState(state);
+          scheduleRender();
+        }, remaining + 200);
+
+        return;
+      }
+
+      // normal: push current to history, go to next
+      state.history.push(state.currentId);
       state.currentId = nextId;
-      pruneState(state);
-      persist();
-      render();
+
+      saveState(state);
+      scheduleRender();
     }
 
-    function back() {
-      const prev = state.history.pop();
-      if (!prev) return;
-      state.currentId = prev;
-      pruneState(state);
-      persist();
-      render();
+    function handleBack() {
+      if (!state.history.length) return;
+      state.currentId = state.history.pop();
+      saveState(state);
+      scheduleRender();
     }
 
-    function nextFrom(step) {
-      if (!step) return null;
-
-      if (step.type === "single_select") {
-        const opt = getSelectedOption(step, state.answers);
-        return (opt && opt.next) || step.next || null;
-      }
-
-      return step.next || null;
-    }
-
-    function canShowExact(step) {
-      if (!state.meta.exact_unlocked || !state.meta.after_permit) return false;
-      if (!step) return false;
-      if (step.id === "address_gate") return false;
-      if (step.id === "permit_check") return false;
-      return true;
-    }
-
-    async function runPermitLookup() {
-      const lookup = cfg.lookup || {};
-      const muniUrl = lookup.municipalities_url;
-      if (!muniUrl) return;
-
-      const sig = addressSig(state.answers);
-
-      // Always run when they hit Continue on address (i.e., resubmitted),
-      // but we still store sig so exact is tied to the submitted address.
-      const muni = await loadMunicipalities(muniUrl);
-
-      const matchField = lookup.match_on || "addr_city";
-      const cityRaw = safeStr(state.answers[matchField]);
-      const cityKey = cityRaw.replace(/,\s*TX$/i, "").trim();
-
-      const row = muni?.cities?.[cityKey] || null;
-      const mapping = lookup.write_to || {};
-
-      for (const [rowKey, answerKey] of Object.entries(mapping)) {
-        state.answers[answerKey] = row ? row[rowKey] : null;
-      }
-
-      state.meta.permit_done = true;
-      state.meta.permit_sig = sig;
-      state.meta.exact_unlocked = true;
-      state.meta.after_permit = true;
-
-      persist();
-    }
-
-    async function submit() {
-      const range = computeRange(cfg, state.answers);
-      const exact = state.meta.exact_unlocked ? computeExact(cfg, range, state.answers) : null;
+    async function submitPayload() {
+      const pr = sumPricing(cfg, qmap, state);
 
       const payload = {
         answers: state.answers,
-        pricing: { range, exact },
         meta: {
           url: location.href,
           ts: new Date().toISOString(),
-          lock_hours: cfg?.meta?.lock_hours || null,
+          permit_done: state.meta.permit_done
         },
+        pricing: {
+          low: pr.low,
+          high: pr.high,
+          exact: pr.exact
+        }
       };
 
       if (!ZAPIER_WEBHOOK_URL || String(ZAPIER_WEBHOOK_URL).includes("PASTE_YOUR_")) {
@@ -356,251 +574,96 @@
       await fetch(ZAPIER_WEBHOOK_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(payload)
       });
 
       alert("Submitted! We'll reach out shortly.");
     }
 
-    // ---- Render ----
-    let renderQueued = false;
-    function scheduleRender() {
-      if (renderQueued) return;
-      renderQueued = true;
-      requestAnimationFrame(() => {
-        renderQueued = false;
-        render();
-      });
-    }
-
     function render() {
-      persist();
-      mount.innerHTML = "";
+      saveState(state);
 
-      const step = getQ(state.currentId);
-      if (!step) {
-        mount.appendChild(mk("div", { class: "card" }, [mk("div", { class: "note" }, ["Config error: missing step."])]));
+      const q = getQuestion(qmap, state.currentId);
+      if (!q) {
+        mount.innerHTML = "<p>Missing question in config.</p>";
         return;
       }
 
-      const range = computeRange(cfg, state.answers);
-      const exact = computeExact(cfg, range, state.answers);
-
-      const showExact = canShowExact(step);
-
-      const previewLabel = showExact ? "Exact Price" : "Estimated Range";
-      const previewValue = showExact ? `$${money(exact)}` : (range.low || range.high ? `$${money(range.low)}–$${money(range.high)}` : "—");
-      const previewSub = showExact ? "Exact price shown after address verification." : "Updates as you answer.";
-
-      const card = mk("div", { class: "card" }, [
-        mk("div", { class: "stepHeader" }, [
-          mk("h2", {}, [step.title || ""]),
-          step.subtitle ? mk("div", { class: "stepSub" }, [step.subtitle]) : null,
-        ]),
-        mk("div", { id: "step-content" }),
-      ]);
-
-      const content = qs("#step-content", card);
-
-      // ---- Step content ----
-      if (step.type === "single_select") {
-        const opts = step.options || [];
-        const hasImages = opts.some((o) => !!o.image_url);
-
-        const wrap = mk("div", { class: hasImages ? "choicesGrid" : "choicesList" });
-
-        opts.forEach((opt) => {
-          const active = String(state.answers[step.id]) === String(opt.value);
-
-          wrap.appendChild(
-            mk(
-              "div",
-              {
-                class: `choice ${active ? "active" : ""} ${opt.image_url ? "hasImg" : ""}`,
-                onClick: () => {
-                  setAnswer(step.id, String(opt.value));
-                  scheduleRender();
-                },
-              },
-              [
-                mk("div", { class: "choiceMain" }, [
-                  mk("div", { class: "choiceTop" }, [
-                    mk("div", { class: "choiceLabel" }, [opt.label]),
-                    opt.tooltip ? tooltip(opt.tooltip) : null,
-                  ]),
-                  opt.image_url ? mk("img", { class: "oimg", src: opt.image_url, alt: "", loading: "lazy" }) : null,
-                ]),
-              ]
-            )
-          );
-        });
-
-        content.appendChild(wrap);
-      } else if (step.type === "form") {
-        (step.fields || []).forEach((f) => {
-          const val = state.answers[f.id] || "";
-          const result = validateField(f, val);
-
-          content.appendChild(
-            mk("div", { class: "field" }, [
-              mk("label", { class: "fieldLabel" }, [f.label || f.id]),
-              mk("input", {
-                type: f.input_type || "text",
-                value: val,
-                placeholder: f.placeholder || "",
-                autocomplete: f.autocomplete || "",
-                onInput: (e) => {
-                  setAnswer(f.id, e.target.value);
-                  scheduleRender();
-                },
-              }),
-              !result.ok && !isEmpty(val) ? mk("div", { class: "fieldErr" }, [result.msg]) : null,
-            ])
-          );
-        });
-      } else if (step.type === "summary") {
-        const disclaimer = cfg?.result_copy?.disclaimer || "";
-        content.appendChild(
-          mk("div", { class: "note" }, [
-            "Review your info, then submit.",
-            disclaimer ? mk("div", { class: "small" }, [disclaimer]) : null,
-          ].filter(Boolean))
-        );
-      } else if (step.type === "submit") {
-        content.appendChild(mk("div", { class: "note" }, [step.subtitle || "Submit to send."]));
+      // prevent landing on loading step via refresh: redirect to its next
+      if (q.type === "loading_lookup") {
+        state.currentId = q.next || state.currentId;
+        saveState(state);
+        scheduleRender();
+        return;
       }
 
-      // ---- Preview ----
-      const disclaimer = cfg?.result_copy?.disclaimer || "";
-      card.appendChild(
-        mk("div", { class: "preview" }, [
-          mk("div", { class: "previewTop" }, [
-            mk("span", {}, [previewLabel]),
-            disclaimer ? tooltip(disclaimer) : null,
+      mount.innerHTML = "";
+
+      const { i, total } = getStepIndex();
+      const pct = total ? Math.round((i / total) * 100) : 0;
+
+      const pr = sumPricing(cfg, qmap, state);
+      const preview = computePreviewLabel(pr);
+
+      const container = mk("div", { class: "card" }, [
+        mk("div", { class: "stepHeader" }, [
+          mk("div", { class: "progressWrap" }, [
+            mk("div", { class: "progressMeta" }, [`Step ${i} of ${total}`]),
+            mk("div", { class: "progressBar" }, [mk("div", { class: "progressFill", style: `width:${pct}%` })])
           ]),
-          mk("div", { class: "previewPrice" }, [previewValue]),
-          mk("div", { class: "previewSub" }, [previewSub]),
+          mk("h2", {}, [q.title || ""]),
+          q.subtitle ? mk("div", { class: "stepSub" }, [q.subtitle]) : null
+        ]),
+        mk("div", { id: "step-content" })
+      ]);
+
+      const content = qs("#step-content", container);
+
+      if (q.type === "single_select") renderSingleSelect(q, content);
+      else if (q.type === "form") renderForm(q, content);
+      else if (q.type === "summary") content.appendChild(mk("div", { class: "note" }, ["Review your answers, then continue."]));
+      else if (q.type === "submit") content.appendChild(mk("div", { class: "note" }, [q.note || "Submit to lock in this estimate."]));
+      else if (q.type === "content") content.appendChild(mk("div", { class: "contentBlock", html: q.html || "" }));
+
+      // nav (not shown on loading lookup; we never render it here)
+      const canGoBack = state.history.length > 0;
+      const stepOk = isQuestionComplete(q, state.answers);
+      const nextLabel = q.next_label || (q.type === "submit" ? (q.submit_label || "Submit") : "Next");
+
+      container.appendChild(
+        mk("div", { class: "nav" }, [
+          mk(
+            "button",
+            { class: "btn secondary", disabled: !canGoBack, onClick: handleBack },
+            ["Back"]
+          ),
+          mk(
+            "button",
+            {
+              class: "btn",
+              disabled: !stepOk,
+              onClick: () => handleNext(q)
+            },
+            [nextLabel]
+          )
         ])
       );
 
-      // ---- Nav ----
-      const canBack = state.history.length > 0;
-      const ok = isStepComplete(step, state.answers);
-
-      const nav = mk("div", { class: "nav" });
-
-      // Back always skips the loading step because loading is never pushed to history.
-      nav.appendChild(
-        mk(
-          "button",
-          { class: "btn secondary", disabled: !canBack, onClick: back },
-          ["Back"]
-        )
+      // preview
+      container.appendChild(
+        mk("div", { class: "preview" }, [
+          mk("div", { class: "previewTop" }, [
+            mk("span", {}, [preview.label]),
+            preview.disclaimer ? tooltip(preview.disclaimer) : null
+          ]),
+          mk("div", { class: "previewPrice" }, [preview.value]),
+          mk("div", { class: "previewSub" }, [preview.sub])
+        ])
       );
 
-      // Next label
-      let nextLabel = "Next";
-      if (step.type === "submit") nextLabel = step.submit_label || "Submit";
-      else if (step.id === "address_gate") nextLabel = "Continue";
-      else if (step.type === "summary") nextLabel = "Get My Estimate";
-
-      nav.appendChild(
-        mk(
-          "button",
-          {
-            class: "btn",
-            disabled: !ok,
-            onClick: async () => {
-              const s = getQ(state.currentId);
-              if (!s) return;
-
-              if (s.type === "submit") {
-                try {
-                  await submit();
-                } catch (e) {
-                  console.error(e);
-                  alert("Submit failed. Please try again.");
-                }
-                return;
-              }
-
-              // Address step special behavior:
-              // - show loading screen
-              // - no nav during loading
-              // - only appears when user hits Continue on address
-              if (s.id === "address_gate") {
-                // push address step to history so Back from contact goes here
-                state.history.push(s.id);
-                persist();
-
-                const loadingStep = getQ(s.next); // permit_check
-                if (!loadingStep || loadingStep.type !== "loading_lookup") {
-                  // no loading configured, just go next
-                  goTo(s.next);
-                  return;
-                }
-
-                renderLoading(mount, loadingStep);
-
-                const duration = Number(loadingStep.duration_ms || 1400);
-                const start = Date.now();
-
-                // start fill animation
-                const fill = qs("#loadFill", mount);
-                const tick = () => {
-                  if (!fill) return;
-                  const t = Math.min(1, (Date.now() - start) / duration);
-                  const eased = 1 - Math.pow(1 - t, 2);
-                  fill.style.width = `${Math.min(92, Math.round(eased * 100))}%`;
-                  if (t < 1) requestAnimationFrame(tick);
-                };
-                requestAnimationFrame(tick);
-
-                try {
-                  await runPermitLookup();
-                } catch (e) {
-                  console.warn("Lookup failed:", e);
-                  // still allow forward, but exact won't be meaningful
-                  state.meta.permit_done = false;
-                  state.meta.exact_unlocked = false;
-                  state.meta.after_permit = false;
-                  delete state.answers.permit_fee_usd;
-                  delete state.answers.expansion_tank_required;
-                  persist();
-                }
-
-                // finish and advance after duration
-                const elapsed = Date.now() - start;
-                const remaining = Math.max(0, duration - elapsed);
-
-                setTimeout(() => {
-                  const f = qs("#loadFill", mount);
-                  if (f) f.style.width = "100%";
-                  goTo(loadingStep.next);
-                }, remaining + 200);
-
-                return;
-              }
-
-              // Normal step: push current -> go next
-              state.history.push(s.id);
-              persist();
-
-              const nextId = nextFrom(s);
-              goTo(nextId);
-            },
-          },
-          [nextLabel]
-        )
-      );
-
-      card.appendChild(nav);
-
-      mount.appendChild(card);
+      mount.appendChild(container);
     }
 
-    pruneState(state);
-    persist();
     render();
   }
 
