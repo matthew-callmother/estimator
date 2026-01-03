@@ -4,30 +4,25 @@
   const ZAPIER_WEBHOOK_URL = "PASTE_YOUR_ZAPIER_CATCH_HOOK_URL_HERE";
   const CONFIG_URL = "https://matthew-callmother.github.io/estimator/config.json";
   const MUNICIPALITIES_URL = "https://matthew-callmother.github.io/estimator/municipalities-dfw.json";
-
   const MOUNT_ID = "wh-estimator";
   const STORAGE_KEY = "wh_estimator_v2_state";
 
   // ---------- Helpers ----------
   const mk = (tag, attrs = {}, children = []) => {
     const el = document.createElement(tag);
-
     for (const [k, v] of Object.entries(attrs || {})) {
       if (k === "class") el.className = v;
       else if (k === "html") el.innerHTML = v;
-      else if (k.startsWith("on") && typeof v === "function") el.addEventListener(k.slice(2).toLowerCase(), v);
+      else if (k.startsWith("on") && typeof v === "function")
+        el.addEventListener(k.slice(2).toLowerCase(), v);
       else if (typeof v === "boolean") {
         if (k in el) el[k] = v;
         if (v) el.setAttribute(k, "");
         else el.removeAttribute(k);
-      } else if (v !== null && v !== undefined) {
-        el.setAttribute(k, String(v));
-      }
+      } else if (v !== null && v !== undefined) el.setAttribute(k, String(v));
     }
-
-    for (const c of children) {
+    for (const c of children)
       if (c) el.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
-    }
     return el;
   };
 
@@ -42,7 +37,6 @@
     const tip = mk("span", { class: "tip" }, ["?"]);
     const bubble = mk("div", { class: "tipBubble", html: text });
     bubble.style.display = "none";
-
     const wrap = mk("span", { class: "tipWrap" }, [tip, bubble]);
     tip.addEventListener("click", (e) => {
       e.preventDefault();
@@ -72,26 +66,22 @@
 
   async function runLookup(state, lookupSpec) {
     if (!lookupSpec) return;
+    if (lookupSpec.source !== "municipalities") return;
 
-    if (lookupSpec.source === "municipalities") {
-      const muni = await loadMunicipalities();
-      const matchField = lookupSpec.match_on || "addr_city";
-      const cityRaw = state.answers[matchField];
-      const city = normalizeCityName(cityRaw, muni);
+    const muni = await loadMunicipalities();
+    const matchField = lookupSpec.match_on || "addr_city";
+    const cityRaw = state.answers[matchField];
+    const city = normalizeCityName(cityRaw, muni);
 
-      const row = muni?.cities?.[city] || null;
-      const mapping = lookupSpec.write_to || {};
+    const row = muni?.cities?.[city] || null;
+    const mapping = lookupSpec.write_to || {};
 
-      for (const [rowKey, answerKey] of Object.entries(mapping)) {
-        state.answers[answerKey] = row ? row[rowKey] : null;
-      }
+    for (const [rowKey, answerKey] of Object.entries(mapping))
+      state.answers[answerKey] = row ? row[rowKey] : null;
 
-      state.answers.municipality_city = row ? city : (city || null);
-      state.answers.municipality_found = !!row;
-
-      // allow "exact" after lookup completes (until user changes answers/back)
-      state.answers.__permit_done = true;
-    }
+    state.answers.municipality_city = row ? city : city || null;
+    state.answers.municipality_found = !!row;
+    state.answers.__permit_done = true;
   }
 
   // ---------- Pricing ----------
@@ -108,87 +98,56 @@
 
     const type = getDriverAnswer(cfg, answers, "type", "type") || "tank";
     const fuel = getDriverAnswer(cfg, answers, "fuel", "fuel") || "gas";
-
     let key = `${type}_${fuel}`;
     if (!base[key]) key = "tank_gas";
 
     let price = Number(base[key] || 0);
-
-    const loc = getDriverAnswer(cfg, answers, "location", "location");
-    const acc = getDriverAnswer(cfg, answers, "access", "access");
-    const urg = getDriverAnswer(cfg, answers, "urgency", "urgency");
-    const vent = getDriverAnswer(cfg, answers, "venting", "venting");
-
-    price += Number(mods.location?.[loc] ?? 0);
-    price += Number(mods.access?.[acc] ?? 0);
-    price += Number(mods.urgency?.[urg] ?? 0);
-
-    if (fuel === "gas" || fuel === "not_sure") {
-      price += Number(mods.venting?.[vent] ?? 0);
-    }
-    if (fuel === "not_sure") {
-      price += Number(mods.fuel_not_sure_penalty ?? 0);
-    }
-
-    // municipality adjustments (populated by lookup)
+    price += Number(mods.location?.[answers.location] ?? 0);
+    price += Number(mods.access?.[answers.access] ?? 0);
+    price += Number(mods.urgency?.[answers.urgency] ?? 0);
+    if (fuel === "gas" || fuel === "not_sure")
+      price += Number(mods.venting?.[answers.venting] ?? 0);
+    if (fuel === "not_sure") price += Number(mods.fuel_not_sure_penalty ?? 0);
     price += Number(answers.permit_fee_usd || 0);
-    if (answers.expansion_tank_required === true) {
+    if (answers.expansion_tank_required)
       price += Number(mods.expansion_tank_cost_usd ?? 0);
-    }
 
     const roundTo = p.safety?.round_to || 25;
     price = Math.round(price / roundTo) * roundTo;
-
     return { display_price: price, scenario_key: key };
   }
 
-  function computePriceRange(cfg, answers, pricingQuestions) {
+  function computePriceRange(cfg, answers, pricingQs) {
     const p = cfg.pricing || {};
     const base = p.base_price || {};
     const mods = p.modifiers || {};
+    const type = getDriverAnswer(cfg, answers, "type", "type");
+    const fuel = getDriverAnswer(cfg, answers, "fuel", "fuel");
 
-    const type = getDriverAnswer(cfg, answers, "type", "type") || null;
-    const fuel = getDriverAnswer(cfg, answers, "fuel", "fuel") || null;
-
-    const baseCandidates = Object.entries(base)
+    const baseVals = Object.entries(base)
       .filter(([k]) => {
-        const [kType, kFuel] = String(k).split("_");
-        if (type && kType !== type) return false;
-        if (fuel && fuel !== "not_sure" && kFuel !== fuel) return false;
+        const [kt, kf] = k.split("_");
+        if (type && kt !== type) return false;
+        if (fuel && fuel !== "not_sure" && kf !== fuel) return false;
         return true;
       })
-      .map(([, v]) => Number(v))
-      .filter((v) => Number.isFinite(v));
+      .map(([, v]) => Number(v));
 
-    let min = baseCandidates.length ? Math.min(...baseCandidates) : 0;
-    let max = baseCandidates.length ? Math.max(...baseCandidates) : 0;
-
-    const ids = new Set((pricingQuestions || []).map((q) => q.id).filter(Boolean));
-
-    const dimRange = (dimKey) => {
-      const m = mods?.[dimKey] || {};
-      const qid = cfg?.pricing?.drivers?.[dimKey] || dimKey;
-      const ans = answers[qid];
-
-      if (!isEmpty(ans)) {
-        const v = Number(m?.[ans] ?? 0);
-        return { min: v, max: v };
-      }
-      const vals = Object.values(m).map(Number).filter((n) => Number.isFinite(n));
-      if (!vals.length) return { min: 0, max: 0 };
-      return { min: Math.min(...vals), max: Math.max(...vals) };
-    };
+    let min = baseVals.length ? Math.min(...baseVals) : 0;
+    let max = baseVals.length ? Math.max(...baseVals) : 0;
 
     const dims = ["location", "access", "urgency", "venting"];
-    for (const dim of dims) {
-      const qid = cfg?.pricing?.drivers?.[dim] || dim;
-      if (dim === "venting") {
-        if (fuel && fuel !== "gas" && fuel !== "not_sure") continue;
-      }
-      if (ids.has(qid) || ids.has(dim)) {
-        const r = dimRange(dim);
-        min += r.min;
-        max += r.max;
+    for (const d of dims) {
+      const m = mods[d] || {};
+      const vals = Object.values(m).map(Number);
+      if (!vals.length) continue;
+      if (!isEmpty(answers[d])) {
+        const v = Number(m[answers[d]] ?? 0);
+        min += v;
+        max += v;
+      } else {
+        min += Math.min(...vals);
+        max += Math.max(...vals);
       }
     }
 
@@ -201,51 +160,25 @@
     const roundTo = p.safety?.round_to || 25;
     min = Math.round(min / roundTo) * roundTo;
     max = Math.round(max / roundTo) * roundTo;
-
     return { min, max };
   }
 
   // ---------- Validation ----------
-  function validateField(field, rawValue) {
-    const v = rawValue == null ? "" : String(rawValue);
-
-    if (field.required && isEmpty(v)) return { ok: false, msg: "Required" };
-
-    if (!isEmpty(v) && field.type === "phone") {
-      if (normalizePhone(v).length < (field.min_digits || 10)) return { ok: false, msg: "Enter a valid phone" };
-    }
-
-    if (!isEmpty(v) && field.type === "email") {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return { ok: false, msg: "Enter a valid email" };
-    }
-
-    if (!isEmpty(v) && field.pattern) {
-      try {
-        const re = new RegExp(field.pattern);
-        if (!re.test(v)) return { ok: false, msg: field.pattern_msg || "Invalid format" };
-      } catch (_) {}
-    }
-
-    if (!isEmpty(v) && field.min_len && v.trim().length < field.min_len) {
-      return { ok: false, msg: `Min ${field.min_len} characters` };
-    }
-
+  function validateField(f, rawValue) {
+    const v = String(rawValue ?? "");
+    if (f.required && isEmpty(v)) return { ok: false, msg: "Required" };
+    if (f.type === "phone" && normalizePhone(v).length < 10)
+      return { ok: false, msg: "Enter a valid phone" };
+    if (f.type === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v))
+      return { ok: false, msg: "Enter a valid email" };
     return { ok: true, msg: "" };
   }
 
-  function isQuestionComplete(q, answers) {
+  function isQuestionComplete(q, a) {
     if (!q) return true;
-
-    if (q.type === "single_select") return !isEmpty(answers[q.id]);
-
-    if (q.type === "form") {
-      for (const f of (q.fields || [])) {
-        const r = validateField(f, answers[f.id]);
-        if (!r.ok) return false;
-      }
-      return true;
-    }
-
+    if (q.type === "single_select") return !isEmpty(a[q.id]);
+    if (q.type === "form")
+      return (q.fields || []).every((f) => validateField(f, a[f.id]).ok);
     return true;
   }
 
@@ -253,152 +186,113 @@
   async function boot() {
     const mount = document.getElementById(MOUNT_ID);
     if (!mount) return;
-
     try {
-      const res = await fetch(CONFIG_URL, { cache: "no-store" });
-      const cfg = await res.json();
+      const cfg = await (await fetch(CONFIG_URL, { cache: "no-store" })).json();
+      const state = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+      state.stepIndex ??= 0;
+      state.answers ??= {};
 
-      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-      const state = {
-        stepIndex: saved.stepIndex || 0,
-        answers: saved.answers || {},
-      };
+      const persist = () =>
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      const scheduleRender = (() => {
+        let queued = false;
+        return () => {
+          if (queued) return;
+          queued = true;
+          requestAnimationFrame(() => {
+            queued = false;
+            render();
+          });
+        };
+      })();
 
-      const persist = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-
-      function visibleQuestions() {
-        const all = cfg.questions || [];
-        return all.filter((q) => {
-          if (!q.depends_on) return true;
-          const a = state.answers[q.depends_on.question_id];
-          return String(a) === String(q.depends_on.equals);
-        });
-      }
-
-      function isTransientStep(step) {
-        return step?.transient === true;
-      }
-
-      function clearPermitOutputs() {
-        (cfg.questions || []).forEach((step) => {
-          if (step?.type === "loading_lookup" && step?.lookup?.source === "municipalities") {
-            delete state.answers[`__ran_${step.id}`];
-            (step.writes || []).forEach((k) => delete state.answers[k]);
-          }
+      const clearPermitOutputs = () => {
+        (cfg.questions || []).forEach((s) => {
+          if (s.type === "loading_lookup")
+            (s.writes || []).forEach((k) => delete state.answers[k]);
         });
         delete state.answers.__permit_done;
-      }
+      };
 
-      function backIndexSkippingTransients(vq, fromIndex) {
-        let i = fromIndex - 1;
-        while (i >= 0 && isTransientStep(vq[i])) i--;
-        return Math.max(i, 0);
-      }
-
-      function allPricingQuestionsComplete(vq) {
-        const pricingQs = (vq || []).filter((q) => q.affects_pricing !== false);
-        return pricingQs.every((q) => isQuestionComplete(q, state.answers));
-      }
-
-      function hasAnyPricingSignal(vq) {
-        const pricingQs = (vq || []).filter((q) => q.affects_pricing !== false);
-        return pricingQs.some((q) => {
-          if (q.type === "single_select") return !isEmpty(state.answers[q.id]);
-          if (q.type === "form") return (q.fields || []).some((f) => !isEmpty(state.answers[f.id]));
-          return false;
+      const visibleQuestions = () =>
+        (cfg.questions || []).filter((q) => {
+          if (!q.depends_on) return true;
+          return (
+            state.answers[q.depends_on.question_id] === q.depends_on.equals
+          );
         });
-      }
-
-      function hasExactRequirements() {
-        const req = cfg?.pricing?.exact_requires || [];
-        if (!req.length) return true;
-        return req.every((fieldId) => !isEmpty(state.answers[fieldId]));
-      }
 
       function computePreview(vq) {
-        const any = hasAnyPricingSignal(vq);
-        const pricingDone = allPricingQuestionsComplete(vq);
-        const exactAllowed = pricingDone && hasExactRequirements() && state.answers.__permit_done === true;
+        const any = vq.some((q) => !isEmpty(state.answers[q.id]));
+        const pricingDone = vq.every((q) => isQuestionComplete(q, state.answers));
+        const exactAllowed =
+          pricingDone &&
+          state.answers.__permit_done === true &&
+          (cfg.pricing?.exact_requires || []).every(
+            (r) => !isEmpty(state.answers[r])
+          );
 
+        const range = computePriceRange(cfg, state.answers, vq);
         const exact = computePrice(cfg, state.answers);
-        const range = computePriceRange(cfg, state.answers, (vq || []).filter((qq) => qq.affects_pricing !== false));
 
-        let label = "Estimated Total";
-        let value = "—";
-        let sub = "Answer a few questions to see your range.";
-
-        if (any && !exactAllowed) {
-          label = "Estimated Range";
-          value = `$${money(range.min)}–$${money(range.max)}`;
-          sub = pricingDone ? "Add your address to get an exact number." : "Range updates as you answer.";
-        }
-
-        if (any && exactAllowed) {
-          label = "Exact Total";
-          value = `$${money(exact.display_price)}`;
-          sub = "Based on your answers + municipality rules.";
-        }
-
-        return { label, value, sub };
+        if (!any)
+          return {
+            label: "Estimated Total",
+            value: "—",
+            sub: "Answer a few questions to see your range.",
+          };
+        if (!exactAllowed)
+          return {
+            label: "Estimated Range",
+            value: `$${money(range.min)}–$${money(range.max)}`,
+            sub: "Add your address to get an exact number.",
+          };
+        return {
+          label: "Exact Total",
+          value: `$${money(exact.display_price)}`,
+          sub: "Based on your answers.",
+        };
       }
 
       async function submitPayload(vq) {
         const exact = computePrice(cfg, state.answers);
-        const range = computePriceRange(cfg, state.answers, (vq || []).filter((q) => q.affects_pricing !== false));
-
+        const range = computePriceRange(cfg, state.answers, vq);
         const payload = {
           answers: state.answers,
           pricing: { exact, range },
           meta: { url: location.href, ts: new Date().toISOString() },
         };
-
-        if (!ZAPIER_WEBHOOK_URL || String(ZAPIER_WEBHOOK_URL).includes("PASTE_YOUR_")) {
-          alert("Submitted (dev mode). Add your Zapier URL to send.");
+        if (!ZAPIER_WEBHOOK_URL.includes("http")) {
+          alert("Submitted (dev mode). Add Zapier URL.");
           return;
         }
-
         await fetch(ZAPIER_WEBHOOK_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-
         alert("Submitted! We'll reach out shortly.");
-      }
-
-      // Always call render via scheduleRender so preview recalcs on:
-      // - answer select
-      // - forward/back
-      // - form typing
-      let renderQueued = false;
-      function scheduleRender() {
-        if (renderQueued) return;
-        renderQueued = true;
-        requestAnimationFrame(() => {
-          renderQueued = false;
-          render();
-        });
       }
 
       function render() {
         persist();
         mount.innerHTML = "";
-
         const vq = visibleQuestions();
-        state.stepIndex = Math.max(0, Math.min(state.stepIndex, vq.length - 1));
-
         const q = vq[state.stepIndex];
-        const isLast = state.stepIndex === vq.length - 1;
-
-        const pct = vq.length ? Math.round(((state.stepIndex + 1) / vq.length) * 100) : 0;
+        const pct = ((state.stepIndex + 1) / vq.length) * 100;
         const preview = computePreview(vq);
 
-        const container = mk("div", { class: "card" }, [
+        const card = mk("div", { class: "card" }, [
           mk("div", { class: "stepHeader" }, [
             mk("div", { class: "progressWrap" }, [
-              mk("div", { class: "progressMeta" }, [`Step ${state.stepIndex + 1} of ${vq.length}`]),
+              mk("div", { class: "progressMeta" }, [
+                `Step ${state.stepIndex + 1} of ${vq.length}`,
+              ]),
               mk("div", { class: "progressBar" }, [
-                mk("div", { class: "progressFill", style: `width:${pct}%` }),
+                mk("div", {
+                  class: "progressFill",
+                  style: `width:${pct}%`,
+                }),
               ]),
             ]),
             mk("h2", {}, [q?.title || ""]),
@@ -407,221 +301,134 @@
           mk("div", { id: "step-content" }),
         ]);
 
-        const content = qs("#step-content", container);
-
-        // ---- render question ----
-        if (q?.type === "single_select") {
-          for (const opt of (q.options || [])) {
+        const content = qs("#step-content", card);
+        // --- render question types ---
+        if (q.type === "single_select") {
+          const opts = q.options || [];
+          const grid = mk("div", {
+            class: opts.some((o) => o.image_url)
+              ? "choicesGrid"
+              : "choicesList",
+          });
+          for (const opt of opts) {
             const active = String(state.answers[q.id]) === String(opt.value);
-            content.appendChild(
-              mk("div", {
-                class: `choice ${active ? "active" : ""}`,
+            const el = mk(
+              "div",
+              {
+                class: `choice ${active ? "active" : ""} ${
+                  opt.image_url ? "hasImg" : ""
+                }`,
                 onClick: () => {
-                  state.answers[q.id] = String(opt.value);
-                  // changing answers should force re-check for exact until permit step reruns
+                  state.answers[q.id] = opt.value;
                   clearPermitOutputs();
                   scheduleRender();
                 },
-              }, [
+              },
+              [
                 mk("div", { class: "choiceMain" }, [
-                  mk("span", { class: "choiceLabel" }, [opt.label]),
+                  mk("div", { class: "choiceLabel" }, [opt.label]),
                   opt.tooltip ? tooltip(opt.tooltip) : null,
-                  opt.image_url ? mk("img", { class: "oimg", src: opt.image_url, alt: "" }) : null,
+                  opt.image_url
+                    ? mk("img", {
+                        class: "oimg",
+                        src: opt.image_url,
+                        alt: "",
+                      })
+                    : null,
                 ]),
-              ])
+              ]
             );
+            grid.appendChild(el);
           }
-        } else if (q?.type === "form") {
-          for (const f of (q.fields || [])) {
+          content.appendChild(grid);
+        } else if (q.type === "form") {
+          for (const f of q.fields || []) {
             const val = state.answers[f.id] || "";
             const result = validateField(f, val);
-
             content.appendChild(
               mk("div", { class: "field" }, [
-                mk("label", { class: "fieldLabel" }, [f.label || f.id, f.help ? tooltip(f.help) : null]),
+                mk("label", { class: "fieldLabel" }, [
+                  f.label,
+                  f.help ? tooltip(f.help) : null,
+                ]),
                 mk("input", {
                   type: f.input_type || "text",
                   value: val,
                   placeholder: f.placeholder || "",
-                  autocomplete: f.autocomplete || "",
                   onInput: (e) => {
                     state.answers[f.id] = e.target.value;
-
-                    // if address or other pricing-related fields change, exact must be re-earned
-                    if (String(f.id).startsWith("addr_")) clearPermitOutputs();
-
-                    scheduleRender(); // <- updates preview live while typing
+                    if (f.id.startsWith("addr_")) clearPermitOutputs();
+                    scheduleRender();
                   },
                 }),
-                (!result.ok && !isEmpty(val)) ? mk("div", { class: "fieldErr" }, [result.msg]) : null,
+                !result.ok && !isEmpty(val)
+                  ? mk("div", { class: "fieldErr" }, [result.msg])
+                  : null,
               ])
             );
           }
-        } else if (q?.type === "content") {
-          content.appendChild(mk("div", { class: "contentBlock", html: q.html || "" }));
-        } else if (q?.type === "summary") {
-          const block = mk("div", { class: "summary" });
-          for (const qq of (vq || [])) {
-            if (qq.type === "submit" || qq.type === "summary" || qq.type === "content" || qq.type === "loading_lookup") continue;
-
-            if (qq.type === "single_select") {
-              const ans = state.answers[qq.id];
-              if (isEmpty(ans)) continue;
-              const opt = (qq.options || []).find((o) => String(o.value) === String(ans));
-              block.appendChild(
-                mk("div", { class: "summaryRow" }, [
-                  mk("div", { class: "summaryK" }, [qq.title || qq.id]),
-                  mk("div", { class: "summaryV" }, [opt ? opt.label : String(ans)]),
-                ])
-              );
-            } else if (qq.type === "form") {
-              for (const f of (qq.fields || [])) {
-                const ans = state.answers[f.id];
-                if (isEmpty(ans)) continue;
-                block.appendChild(
-                  mk("div", { class: "summaryRow" }, [
-                    mk("div", { class: "summaryK" }, [f.label || f.id]),
-                    mk("div", { class: "summaryV" }, [String(ans)]),
-                  ])
-                );
-              }
-            }
-          }
-
-          content.appendChild(block);
-        } else if (q?.type === "submit") {
-          content.appendChild(mk("div", { class: "note" }, [q.note || "Submit your info to lock in this estimate."]));
-        } else {
-          content.appendChild(mk("div", { class: "note" }, ["Unsupported question type."]));
         }
 
-        // ---- nav ----
-        const canGoBack = state.stepIndex > 0;
+        // --- nav buttons ---
+        const canBack = state.stepIndex > 0;
         const stepOk = isQuestionComplete(q, state.answers);
-        const nextLabel = q?.next_label || (isLast ? (q?.submit_label || "Submit") : "Next");
-
-        container.appendChild(
+        const isLast = state.stepIndex === vq.length - 1;
+        card.appendChild(
           mk("div", { class: "nav" }, [
-            mk("button", {
-              class: "btn secondary",
-              disabled: !canGoBack,
-              onClick: () => {
-                clearPermitOutputs(); // always revert to range until permit step reruns
-                state.stepIndex = backIndexSkippingTransients(vq, state.stepIndex);
-                scheduleRender();
+            mk(
+              "button",
+              {
+                class: "btn secondary",
+                disabled: !canBack,
+                onClick: () => {
+                  clearPermitOutputs();
+                  state.stepIndex = Math.max(0, state.stepIndex - 1);
+                  scheduleRender();
+                },
               },
-            }, ["Back"]),
-
-            mk("button", {
-              class: "btn",
-              disabled: !stepOk,
-              onClick: async () => {
-                if (q?.type === "submit") {
-                  try { await submitPayload(vq); }
-                  catch (e) { console.error(e); alert("Submit failed. Please try again."); }
-                  return;
-                }
-                if (isLast) return;
-
-                const next = vq[state.stepIndex + 1];
-
-                // transient loading_lookup runs BETWEEN steps (not a real back destination)
-                if (next?.type === "loading_lookup" && next?.transient === true) {
-                  mount.innerHTML = "";
-
-                  const duration = Number(next.duration_ms || 1400);
-                  const start = Date.now();
-                  const fillId = `loadfill_${next.id}`;
-
-                  const card = mk("div", { class: "card" }, [
-                    mk("div", { class: "stepHeader" }, [
-                      mk("div", { class: "progressWrap" }, [
-                        mk("div", { class: "progressMeta" }, [`Step ${state.stepIndex + 2} of ${vq.length}`]),
-                        mk("div", { class: "progressBar" }, [
-                          mk("div", { class: "progressFill", style: `width:${Math.round(((state.stepIndex + 2) / vq.length) * 100)}%` }),
-                        ]),
-                      ]),
-                    ]),
-                    mk("div", { class: "loading" }, [
-                      mk("div", { class: "loadingInner" }, [
-                        mk("div", { class: "spinner" }),
-                        mk("div", { class: "loadingTitle" }, [next.title || "Checking…"]),
-                        next.subtitle ? mk("div", { class: "loadingSub" }, [next.subtitle]) : null,
-                        mk("div", { class: "loadBar" }, [
-                          mk("div", { id: fillId, class: "loadFill", style: "width:0%" }),
-                        ]),
-                      ]),
-                    ]),
-                  ]);
-
-                  mount.appendChild(card);
-
-                  // always re-run and re-earn exact
-                  delete state.answers[`__ran_${next.id}`];
-                  (next.writes || []).forEach((k) => delete state.answers[k]);
-                  delete state.answers.__permit_done;
-
-                  const tick = () => {
-                    const el = document.getElementById(fillId);
-                    if (!el) return;
-                    const t = Math.min(1, (Date.now() - start) / duration);
-                    const eased = 1 - Math.pow(1 - t, 2);
-                    el.style.width = `${Math.min(92, Math.round(eased * 100))}%`;
-                    if (t < 1) requestAnimationFrame(tick);
-                  };
-                  requestAnimationFrame(tick);
-
-                  (async () => {
-                    try { await runLookup(state, next.lookup); }
-                    catch (e) { console.warn("Lookup failed:", e); state.answers.municipality_found = false; }
-
-                    const el = document.getElementById(fillId);
-                    if (el) el.style.width = "100%";
-
-                    const elapsed = Date.now() - start;
-                    const remaining = Math.max(0, duration - elapsed);
-
-                    setTimeout(() => {
-                      state.stepIndex = state.stepIndex + 2; // skip over transient step
-                      persist();
-                      scheduleRender();
-                    }, remaining + 250);
-                  })();
-
-                  return;
-                }
-
-                // normal next
-                state.stepIndex++;
-                scheduleRender();
+              ["Back"]
+            ),
+            mk(
+              "button",
+              {
+                class: "btn",
+                disabled: !stepOk,
+                onClick: async () => {
+                  if (q.type === "submit") {
+                    await submitPayload(vq);
+                    return;
+                  }
+                  state.stepIndex++;
+                  scheduleRender();
+                },
               },
-            }, [nextLabel]),
+              [isLast ? "Submit" : "Next"]
+            ),
           ])
         );
 
-        // ---- preview ----
-        container.appendChild(
+        // --- live preview ---
+        card.appendChild(
           mk("div", { class: "preview" }, [
             mk("div", { class: "previewTop" }, [
               mk("span", {}, [preview.label]),
-              tooltip("Sample tooltip text. Click “?” to toggle. Style .tip / .tipBubble."),
             ]),
             mk("div", { class: "previewPrice" }, [preview.value]),
             mk("div", { class: "previewSub" }, [preview.sub]),
           ])
         );
 
-        mount.appendChild(container);
+        mount.appendChild(card);
       }
 
       scheduleRender();
     } catch (e) {
-      const mount = document.getElementById(MOUNT_ID);
-      if (mount) mount.innerHTML = `<p>Error loading configuration. Check console.</p>`;
       console.error(e);
+      mount.innerHTML = "<p>Error loading configuration.</p>";
     }
   }
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", boot);
   else boot();
 })();
