@@ -61,8 +61,8 @@
       "image_url": "",
       "affects_pricing": true,
       "options": [
-        { "value": "tank", "label": "Tank", "image_url": "" },
-        { "value": "tankless", "label": "Tankless", "image_url": "" }
+        { "value": "tank", "label": "Tank", "image_url": "https://cdn.prod.website-files.com/678144dfb4c536263e714199/6959542f801a71c999749c88_conventional.png" },
+        { "value": "tankless", "label": "Tankless", "image_url": "https://cdn.prod.website-files.com/678144dfb4c536263e714199/695954b2a011b846bd420fac_tankless-wireframe.png" }
       ]
     },
     {
