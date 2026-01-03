@@ -236,39 +236,7 @@
   function isQuestionComplete(q, answers) {
     if (!q) return true;
 
-    if (q?.type === "single_select") {
-  const opts = q.options || [];
-  const anyImgs = opts.some(o => !!o.image_url);
-
-  const wrap = mk("div", { class: anyImgs ? "choicesGrid" : "choicesList" });
-  content.appendChild(wrap);
-
-  opts.forEach((opt) => {
-    const active = String(state.answers[q.id]) === String(opt.value);
-    const hasImg = !!opt.image_url;
-
-    wrap.appendChild(
-      mk("div", {
-        class: `choice ${active ? "active" : ""} ${hasImg ? "hasImg" : ""}`,
-        onClick: () => {
-          state.answers[q.id] = String(opt.value);
-          clearPermitOutputs?.();     // if you have this in scope; otherwise remove
-          scheduleRender?.();         // if you have this in scope; otherwise render()
-          if (!scheduleRender) render();
-        }
-      }, [
-        mk("div", { class: "choiceMain" }, [
-          mk("div", { class: "choiceTop" }, [
-            mk("div", { class: "choiceLabel" }, [opt.label]),
-            opt.tooltip ? tooltip(opt.tooltip) : null,
-          ]),
-          hasImg ? mk("img", { class: "oimg", src: opt.image_url, alt: "" }) : null
-        ])
-      ])
-    );
-  });
-}
-
+    if (q.type === "single_select") return !isEmpty(answers[q.id]);
 
     if (q.type === "form") {
       for (const f of (q.fields || [])) {
@@ -657,4 +625,3 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 })();
-
