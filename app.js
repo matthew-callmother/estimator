@@ -353,49 +353,46 @@
     }
 
     // IMPORTANT: no scheduleRender() on input (keeps Android keyboard open)
-    function renderForm(q, content, ui) {
-      (q.fields || []).forEach((f) => {
-        const val = state.answers[f.id] || "";
-        const errEl = mk("div", { class: "fieldErr", style: "display:none" }, [""]);
-
-        const inputEl = mk("input", {
-          type: f.input_type || "text",
-          value: val,
-          placeholder: f.placeholder || "",
-          autocomplete: f.autocomplete || "",
-          onInput: (e) => {
-            state.answers[f.id] = e.target.value;
-
-            if (String(f.id).startsWith("addr_")) invalidatePermit(cfg, state);
-
-            saveState(state);
-
-            const r = validateField(f, state.answers[f.id]);
-            if (!r.ok && !isEmpty(state.answers[f.id])) {
-              errEl.style.display = "block";
-              errEl.textContent = r.msg;
-            } else {
-              errEl.style.display = "none";
-              errEl.textContent = "";
-            }
-
-            ui.updateNextDisabled();
-            ui.updatePreview();
-          }
-        });
-
-        content.appendChild(
-          mk("div", { class: "field" }, [
-            mk("label", { class: "fieldLabel" }, [
-              f.label || f.id,
-              f.help ? tooltip(f.help) : null
-            ]),
-            inputEl,
-            errEl
-          ])
-        );
-      });
+        function renderForm(q, content, ui) {
+          (q.fields || []).forEach((f) => {
+            const val = state.answers[f.id] || "";
+            const errEl = mk("div", { class: "fieldErr", style: "display:none" }, [""]);
+        
+            const inputEl = mk("input", {
+              type: f.input_type || "text",
+              value: val,
+              placeholder: f.placeholder || "",
+              autocomplete: f.autocomplete || "",
+              onInput: (e) => {
+                state.answers[f.id] = e.target.value;
+        
+                if (String(f.id).startsWith("addr_")) invalidatePermit(cfg, state);
+                saveState(state);
+        
+                const r = validateField(f, state.answers[f.id]);
+                if (!r.ok && !isEmpty(state.answers[f.id])) {
+                  errEl.style.display = "block";
+                  errEl.textContent = r.msg;
+                } else {
+                  errEl.style.display = "none";
+                  errEl.textContent = "";
+                }
+        
+                if (ui?.updateNextDisabled) ui.updateNextDisabled();
+                if (ui?.updatePreview) ui.updatePreview();
+              }
+            });
+        
+            content.appendChild(
+              mk("div", { class: "field" }, [
+                mk("label", { class: "fieldLabel" }, [f.label || f.id, f.help ? tooltip(f.help) : null]),
+                inputEl,
+                errEl
+              ])
+            );
+          });
     }
+
 
     function renderLoadingStep(q) {
       mount.innerHTML = "";
@@ -538,30 +535,31 @@
 
     function render() {
       saveState(state);
-
+    
       const q = getQuestion(qmap, state.currentId);
       if (!q) {
         mount.innerHTML = "<p>Missing question in config.</p>";
         return;
       }
-
-      // if user refreshes on loading step, skip it
+    
+      // refresh-on-loading: skip
       if (q.type === "loading_lookup") {
         state.currentId = q.next || state.currentId;
         saveState(state);
         scheduleRender();
         return;
       }
-
+    
       mount.innerHTML = "";
-
+    
       const { i, total } = getStepIndex();
       const pct = total ? Math.round((i / total) * 100) : 0;
-
+    
       const pr = sumPricing(cfg, qmap, state);
       const preview = computePreviewLabel(pr);
-
-      // Build header with optional ALWAYS-VISIBLE question tip
+    
+      const content = mk("div", { id: "step-content" });
+    
       const header = mk("div", { class: "stepHeader" }, [
         mk("div", { class: "progressWrap" }, [
           mk("div", { class: "progressMeta" }, [`Step ${i} of ${total}`]),
@@ -569,57 +567,51 @@
         ]),
         mk("h2", {}, [q.title || ""]),
         q.subtitle ? mk("div", { class: "stepSub" }, [q.subtitle]) : null,
-        (q.tip || q.help || q.tooltip) ? mk("div", { class: "qTip", html: (q.tip || q.help || q.tooltip) }) : null
+        // question tooltip rendered as a visible box (optional)
+        (q.tip || q.help || q.tooltip) ? mk("div", { class: "qTip" }, [q.tip || q.help || q.tooltip]) : null
       ]);
-
-      const content = mk("div", { id: "step-content" });
-
-      // Nav buttons (need refs for Android input updates)
-      const backBtn = mk("button", { class: "btn secondary", disabled: !state.history.length, onClick: handleBack }, ["Back"]);
+    
+      const canGoBack = state.history.length > 0;
       const nextLabel = q.next_label || (q.type === "submit" ? (q.submit_label || "Submit") : "Next");
+    
+      const backBtn = mk("button", { class: "btn secondary", disabled: !canGoBack, onClick: handleBack }, ["Back"]);
       const nextBtn = mk("button", { class: "btn", disabled: !isQuestionComplete(q, state.answers), onClick: () => handleNext(q) }, [nextLabel]);
+    
       const nav = mk("div", { class: "nav" }, [backBtn, nextBtn]);
-
-      // Preview (need refs for Android input updates)
-      const previewTopLabel = mk("span", {}, [preview.label]);
-      const disclaimerWrap = mk("span", { class: "previewDisclaimer" }, [preview.disclaimer ? tooltip(preview.disclaimer) : null]);
+    
+      // preview nodes (so we don't querySelector before they exist)
+      const previewLabelEl = mk("span", {}, [preview.label]);
       const previewPriceEl = mk("div", { class: "previewPrice" }, [preview.value]);
       const previewSubEl = mk("div", { class: "previewSub" }, [preview.sub]);
-
-      const previewEl = mk("div", { class: "preview" }, [
-        mk("div", { class: "previewTop" }, [previewTopLabel, disclaimerWrap]),
-        previewPriceEl,
-        previewSubEl
+      const previewTop = mk("div", { class: "previewTop" }, [
+        previewLabelEl,
+        preview.disclaimer ? tooltip(preview.disclaimer) : null
       ]);
-
-      const container = mk("div", { class: "card" }, [header, content, nav, previewEl]);
-
-      // UI helpers used by form inputs (NO re-render)
+    
+      const previewEl = mk("div", { class: "preview" }, [previewTop, previewPriceEl, previewSubEl]);
+    
       const ui = {
         updateNextDisabled: () => { nextBtn.disabled = !isQuestionComplete(q, state.answers); },
         updatePreview: () => {
           const pr2 = sumPricing(cfg, qmap, state);
           const p2 = computePreviewLabel(pr2);
-          previewTopLabel.textContent = p2.label;
+          previewLabelEl.textContent = p2.label;
           previewPriceEl.textContent = p2.value;
           previewSubEl.textContent = p2.sub;
-
-          // refresh disclaimer tooltip
-          disclaimerWrap.innerHTML = "";
-          const t = p2.disclaimer ? tooltip(p2.disclaimer) : null;
-          if (t) disclaimerWrap.appendChild(t);
         }
       };
-
-      // Render step body
+    
+      // body
       if (q.type === "single_select") renderSingleSelect(q, content);
       else if (q.type === "form") renderForm(q, content, ui);
       else if (q.type === "summary") content.appendChild(mk("div", { class: "note" }, ["Review your answers, then continue."]));
       else if (q.type === "submit") content.appendChild(mk("div", { class: "note" }, [q.note || "Submit to lock in this estimate."]));
       else if (q.type === "content") content.appendChild(mk("div", { class: "contentBlock", html: q.html || "" }));
-
+    
+      const container = mk("div", { class: "card" }, [header, content, nav, previewEl]);
       mount.appendChild(container);
     }
+
 
     render();
   }
@@ -627,3 +619,4 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 })();
+
