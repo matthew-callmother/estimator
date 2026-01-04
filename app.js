@@ -15,7 +15,7 @@
   const isEmpty = (v) => v === null || v === undefined || String(v).trim() === "";
   const safeStr = (v) => String(v == null ? "" : v).trim();
 
-  // FIX: mk() now ignores null/undefined/false and flattens arrays
+  // mk() ignores null/undefined/false and flattens arrays
   const mk = (tag, attrs = {}, children = []) => {
     const el = document.createElement(tag);
 
@@ -105,18 +105,12 @@
   /* ---------------- State ---------------- */
   function defaultState() {
     return {
-      // current question id
       currentId: null,
-      // answers store: questionId -> optionValue, plus form fields by id
       answers: {},
-      // routing history stack of question ids (for Back)
       history: [],
-      // meta flags
       meta: {
-        // permit lookup completion for current address signature
         permit_done: false,
         permit_sig: null,
-        // whether user has submitted address step (so exact is only after submit + lookup)
         address_submitted_sig: null
       }
     };
@@ -156,26 +150,20 @@
     return (q?.options || []).find((o) => String(o.value) === String(value)) || null;
   }
 
-  /* ---------------- Pricing (simple: sum of selected options) ----------------
-     - Each selected option may include:
-       pricing: { low: number, high: number, exact: number }
-     - Range shown until address submitted + lookup finished
-     - Exact shown only after address submit + lookup complete AND on steps AFTER address
-  */
+  /* ---------------- Pricing ---------------- */
   function sumPricing(cfg, qmap, state) {
     let low = 0, high = 0, exact = 0;
-
     const selectedOptionPricing = [];
 
     for (const q of (cfg.questions || [])) {
       if (q.type !== "single_select") continue;
       const v = state.answers[q.id];
       if (isEmpty(v)) continue;
+
       const opt = getOption(q, v);
-      if (!opt?.pricing) continue;
+      if (!opt || (!opt.pricing && !opt.price)) continue; // FIX: allow either key
 
       const p = opt.pricing || opt.price || {};
-
       const l = Number(p.low ?? 0) || 0;
       const h = Number(p.high ?? l) || 0;
       const e = Number(p.exact ?? h) || 0;
@@ -187,7 +175,6 @@
       selectedOptionPricing.push({ qid: q.id, value: v, low: l, high: h, exact: e });
     }
 
-    // permit / address-based add-ons (only apply when permit_done true for current address)
     if (state.meta.permit_done && state.meta.permit_sig === computeAddressSig(cfg, state.answers)) {
       const fee = Number(state.answers.permit_fee_usd || 0) || 0;
       low += fee; high += fee; exact += fee;
@@ -201,12 +188,7 @@
     const roundTo = Number(cfg?.pricing?.safety?.round_to || 25) || 25;
     const round = (n) => Math.round(n / roundTo) * roundTo;
 
-    return {
-      low: round(low),
-      high: round(high),
-      exact: round(exact),
-      items: selectedOptionPricing
-    };
+    return { low: round(low), high: round(high), exact: round(exact), items: selectedOptionPricing };
   }
 
   /* ---------------- Validation ---------------- */
@@ -253,9 +235,7 @@
     state.meta.permit_sig = null;
     state.meta.address_submitted_sig = null;
 
-    // clear lookup outputs
-    const lookupWrites = ["permit_fee_usd", "expansion_tank_required", "municipality_city", "municipality_found"];
-    lookupWrites.forEach((k) => delete state.answers[k]);
+    ["permit_fee_usd", "expansion_tank_required", "municipality_city", "municipality_found"].forEach((k) => delete state.answers[k]);
   }
 
   /* ---------------- Lookup runner ---------------- */
@@ -264,7 +244,6 @@
     const city = normalizeCityName(state.answers.addr_city, muni);
     const row = muni?.cities?.[city] || null;
 
-    // write outputs to answers
     const mapping = lookupQuestion?.lookup?.write_to || {};
     for (const [rowKey, answerKey] of Object.entries(mapping)) {
       state.answers[answerKey] = row ? row[rowKey] : null;
@@ -293,17 +272,13 @@
 
     const state = loadState();
 
-    // set initial current question
-    if (!state.currentId) {
-      state.currentId = cfg.start || (cfg.questions?.[0]?.id ?? null);
-    }
+    if (!state.currentId) state.currentId = cfg.start || (cfg.questions?.[0]?.id ?? null);
     if (!state.currentId) {
       mount.innerHTML = "<p>No questions configured.</p>";
       return;
     }
 
     const getStepIndex = () => {
-      // purely for progress bar; uses history + current
       const path = [...state.history, state.currentId];
       return { i: path.length, total: Math.max(path.length, 1) };
     };
@@ -320,45 +295,26 @@
 
     function computePreviewLabel(pr) {
       const disclaimer = cfg?.result_copy?.disclaimer || "";
-      const afterAddressSubmit =
-        state.meta.address_submitted_sig &&
-        state.meta.address_submitted_sig === computeAddressSig(cfg, state.answers);
+
+      const addrSig = computeAddressSig(cfg, state.answers);
+      const afterAddressSubmit = state.meta.address_submitted_sig && state.meta.address_submitted_sig === addrSig;
 
       const exactReady =
         afterAddressSubmit &&
         state.meta.permit_done &&
-        state.meta.permit_sig === computeAddressSig(cfg, state.answers);
+        state.meta.permit_sig === addrSig;
 
-      // exact only shown after permit lookup AND not while sitting on address gate
       const isOnAddressGate = state.currentId === cfg.address_gate_id;
 
       if (exactReady && !isOnAddressGate) {
-        return {
-          mode: "exact",
-          label: "Exact Total",
-          value: `$${money(pr.exact)}`,
-          sub: "Exact price shown after address verification.",
-          disclaimer
-        };
+        return { mode: "exact", label: "Exact Total", value: `$${money(pr.exact)}`, sub: "Exact price shown after address verification.", disclaimer };
       }
 
       if (pr.low === 0 && pr.high === 0) {
-        return {
-          mode: "empty",
-          label: "Estimated Range",
-          value: "—",
-          sub: "Answer a few questions to see your range.",
-          disclaimer
-        };
+        return { mode: "empty", label: "Estimated Range", value: "—", sub: "Answer a few questions to see your range.", disclaimer };
       }
 
-      return {
-        mode: "range",
-        label: "Estimated Range",
-        value: `$${money(pr.low)}–$${money(pr.high)}`,
-        sub: "Range updates as you go. Add your address to get an exact number.",
-        disclaimer
-      };
+      return { mode: "range", label: "Estimated Range", value: `$${money(pr.low)}–$${money(pr.high)}`, sub: "Range updates as you go. Add your address to get an exact number.", disclaimer };
     }
 
     function renderSingleSelect(q, content) {
@@ -376,8 +332,6 @@
               class: `choice ${active ? "active" : ""} ${opt.image_url ? "hasImg" : ""}`,
               onClick: () => {
                 state.answers[q.id] = String(opt.value);
-
-                // selecting an option can change routing; if it does, we still stay on this step
                 saveState(state);
                 scheduleRender();
               }
@@ -398,53 +352,50 @@
       content.appendChild(wrap);
     }
 
+    // IMPORTANT: no scheduleRender() on input (keeps Android keyboard open)
     function renderForm(q, content, ui) {
-  (q.fields || []).forEach((f) => {
-    const val = state.answers[f.id] || "";
+      (q.fields || []).forEach((f) => {
+        const val = state.answers[f.id] || "";
+        const errEl = mk("div", { class: "fieldErr", style: "display:none" }, [""]);
 
-    const errEl = mk("div", { class: "fieldErr", style: "display:none" }, [""]);
+        const inputEl = mk("input", {
+          type: f.input_type || "text",
+          value: val,
+          placeholder: f.placeholder || "",
+          autocomplete: f.autocomplete || "",
+          onInput: (e) => {
+            state.answers[f.id] = e.target.value;
 
-    const inputEl = mk("input", {
-      type: f.input_type || "text",
-      value: val,
-      placeholder: f.placeholder || "",
-      autocomplete: f.autocomplete || "",
-      onInput: (e) => {
-        state.answers[f.id] = e.target.value;
+            if (String(f.id).startsWith("addr_")) invalidatePermit(cfg, state);
 
-        // address changes invalidate permit/exact
-        if (String(f.id).startsWith("addr_")) invalidatePermit(cfg, state);
+            saveState(state);
 
-        saveState(state);
+            const r = validateField(f, state.answers[f.id]);
+            if (!r.ok && !isEmpty(state.answers[f.id])) {
+              errEl.style.display = "block";
+              errEl.textContent = r.msg;
+            } else {
+              errEl.style.display = "none";
+              errEl.textContent = "";
+            }
 
-        // inline validate this field
-        const r = validateField(f, state.answers[f.id]);
-        if (!r.ok && !isEmpty(state.answers[f.id])) {
-          errEl.style.display = "block";
-          errEl.textContent = r.msg;
-        } else {
-          errEl.style.display = "none";
-          errEl.textContent = "";
-        }
+            ui.updateNextDisabled();
+            ui.updatePreview();
+          }
+        });
 
-        // update Next disabled state
-        ui.updateNextDisabled();
-
-        // update footer pricing label (range vs exact) without rerender
-        ui.updatePreview();
-      }
-    });
-
-    content.appendChild(
-      mk("div", { class: "field" }, [
-        mk("label", { class: "fieldLabel" }, [f.label || f.id, f.help ? tooltip(f.help) : null]),
-        inputEl,
-        errEl
-      ])
-    );
-  });
-}
-
+        content.appendChild(
+          mk("div", { class: "field" }, [
+            mk("label", { class: "fieldLabel" }, [
+              f.label || f.id,
+              f.help ? tooltip(f.help) : null
+            ]),
+            inputEl,
+            errEl
+          ])
+        );
+      });
+    }
 
     function renderLoadingStep(q) {
       mount.innerHTML = "";
@@ -491,24 +442,19 @@
     async function handleNext(q) {
       const current = q;
 
-      // submit
       if (current.type === "submit") {
         await submitPayload();
         return;
       }
 
-      // validate
       if (!isQuestionComplete(current, state.answers)) return;
 
-      // address gate special: mark submitted sig
       if (current.id === cfg.address_gate_id) {
         state.meta.address_submitted_sig = computeAddressSig(cfg, state.answers);
       }
 
-      // determine next id:
       let nextId = current.next || null;
 
-      // option-level next override
       if (current.type === "single_select") {
         const v = state.answers[current.id];
         const opt = getOption(current, v);
@@ -517,10 +463,8 @@
 
       if (!nextId) return;
 
-      // if next is loading lookup, show it (not part of history), run lookup, then auto-advance to its next
       const nextQ = getQuestion(qmap, nextId);
       if (nextQ?.type === "loading_lookup") {
-        // render loading (no nav)
         const tracker = renderLoadingStep(nextQ);
 
         try {
@@ -539,10 +483,8 @@
         const remaining = Math.max(0, tracker.duration - elapsed);
 
         setTimeout(() => {
-          // advance to loading's next
           const afterId = nextQ.next || null;
           if (afterId) {
-            // push CURRENT into history, not the loading step
             state.history.push(state.currentId);
             state.currentId = afterId;
           }
@@ -553,7 +495,6 @@
         return;
       }
 
-      // normal: push current to history, go to next
       state.history.push(state.currentId);
       state.currentId = nextId;
 
@@ -578,11 +519,7 @@
           ts: new Date().toISOString(),
           permit_done: state.meta.permit_done
         },
-        pricing: {
-          low: pr.low,
-          high: pr.high,
-          exact: pr.exact
-        }
+        pricing: { low: pr.low, high: pr.high, exact: pr.exact }
       };
 
       if (!ZAPIER_WEBHOOK_URL || String(ZAPIER_WEBHOOK_URL).includes("PASTE_YOUR_")) {
@@ -608,7 +545,7 @@
         return;
       }
 
-      // prevent landing on loading step via refresh: redirect to its next
+      // if user refreshes on loading step, skip it
       if (q.type === "loading_lookup") {
         state.currentId = q.next || state.currentId;
         saveState(state);
@@ -623,82 +560,63 @@
 
       const pr = sumPricing(cfg, qmap, state);
       const preview = computePreviewLabel(pr);
-      
 
-      const container = mk("div", { class: "card" }, [
-        mk("div", { class: "stepHeader" }, [
-          mk("div", { class: "progressWrap" }, [
-            mk("div", { class: "progressMeta" }, [`Step ${i} of ${total}`]),
-            mk("div", { class: "progressBar" }, [mk("div", { class: "progressFill", style: `width:${pct}%` })])
-          ]),
-          mk("h2", {}, [q.title || ""]),
-          q.subtitle ? mk("div", { class: "stepSub" }, [q.subtitle]) : null
+      // Build header with optional ALWAYS-VISIBLE question tip
+      const header = mk("div", { class: "stepHeader" }, [
+        mk("div", { class: "progressWrap" }, [
+          mk("div", { class: "progressMeta" }, [`Step ${i} of ${total}`]),
+          mk("div", { class: "progressBar" }, [mk("div", { class: "progressFill", style: `width:${pct}%` })])
         ]),
-        mk("div", { id: "step-content" })
+        mk("h2", {}, [q.title || ""]),
+        q.subtitle ? mk("div", { class: "stepSub" }, [q.subtitle]) : null,
+        (q.tip || q.help || q.tooltip) ? mk("div", { class: "qTip", html: (q.tip || q.help || q.tooltip) }) : null
       ]);
-      const previewTopLabel = container.querySelector(".previewTop span");
-const previewPriceEl  = container.querySelector(".previewPrice");
-const previewSubEl    = container.querySelector(".previewSub");
-const nextBtn         = container.querySelector(".nav .btn:not(.secondary)");
 
-const ui = {
-  updateNextDisabled: () => { nextBtn.disabled = !isQuestionComplete(q, state.answers); },
-  updatePreview: () => {
-    const pr = sumPricing(cfg, qmap, state);
-    const p = computePreviewLabel(pr);
-    previewTopLabel.textContent = p.label;
-    previewPriceEl.textContent  = p.value;
-    previewSubEl.textContent    = p.sub;
-  }
-};
+      const content = mk("div", { id: "step-content" });
 
-if (q.type === "form") renderForm(q, content, ui);
+      // Nav buttons (need refs for Android input updates)
+      const backBtn = mk("button", { class: "btn secondary", disabled: !state.history.length, onClick: handleBack }, ["Back"]);
+      const nextLabel = q.next_label || (q.type === "submit" ? (q.submit_label || "Submit") : "Next");
+      const nextBtn = mk("button", { class: "btn", disabled: !isQuestionComplete(q, state.answers), onClick: () => handleNext(q) }, [nextLabel]);
+      const nav = mk("div", { class: "nav" }, [backBtn, nextBtn]);
 
-      const content = qs("#step-content", container);
+      // Preview (need refs for Android input updates)
+      const previewTopLabel = mk("span", {}, [preview.label]);
+      const disclaimerWrap = mk("span", { class: "previewDisclaimer" }, [preview.disclaimer ? tooltip(preview.disclaimer) : null]);
+      const previewPriceEl = mk("div", { class: "previewPrice" }, [preview.value]);
+      const previewSubEl = mk("div", { class: "previewSub" }, [preview.sub]);
 
+      const previewEl = mk("div", { class: "preview" }, [
+        mk("div", { class: "previewTop" }, [previewTopLabel, disclaimerWrap]),
+        previewPriceEl,
+        previewSubEl
+      ]);
+
+      const container = mk("div", { class: "card" }, [header, content, nav, previewEl]);
+
+      // UI helpers used by form inputs (NO re-render)
+      const ui = {
+        updateNextDisabled: () => { nextBtn.disabled = !isQuestionComplete(q, state.answers); },
+        updatePreview: () => {
+          const pr2 = sumPricing(cfg, qmap, state);
+          const p2 = computePreviewLabel(pr2);
+          previewTopLabel.textContent = p2.label;
+          previewPriceEl.textContent = p2.value;
+          previewSubEl.textContent = p2.sub;
+
+          // refresh disclaimer tooltip
+          disclaimerWrap.innerHTML = "";
+          const t = p2.disclaimer ? tooltip(p2.disclaimer) : null;
+          if (t) disclaimerWrap.appendChild(t);
+        }
+      };
+
+      // Render step body
       if (q.type === "single_select") renderSingleSelect(q, content);
-      else if (q.type === "form") renderForm(q, content);
+      else if (q.type === "form") renderForm(q, content, ui);
       else if (q.type === "summary") content.appendChild(mk("div", { class: "note" }, ["Review your answers, then continue."]));
       else if (q.type === "submit") content.appendChild(mk("div", { class: "note" }, [q.note || "Submit to lock in this estimate."]));
       else if (q.type === "content") content.appendChild(mk("div", { class: "contentBlock", html: q.html || "" }));
-
-      
-      
-      // nav (not shown on loading lookup; we never render it here)
-      const canGoBack = state.history.length > 0;
-      const stepOk = isQuestionComplete(q, state.answers);
-      const nextLabel = q.next_label || (q.type === "submit" ? (q.submit_label || "Submit") : "Next");
-
-      container.appendChild(
-        mk("div", { class: "nav" }, [
-          mk(
-            "button",
-            { class: "btn secondary", disabled: !canGoBack, onClick: handleBack },
-            ["Back"]
-          ),
-          mk(
-            "button",
-            {
-              class: "btn",
-              disabled: !stepOk,
-              onClick: () => handleNext(q)
-            },
-            [nextLabel]
-          )
-        ])
-      );
-
-      // preview
-      container.appendChild(
-        mk("div", { class: "preview" }, [
-          mk("div", { class: "previewTop" }, [
-            mk("span", {}, [preview.label]),
-            preview.disclaimer ? tooltip(preview.disclaimer) : null
-          ]),
-          mk("div", { class: "previewPrice" }, [preview.value]),
-          mk("div", { class: "previewSub" }, [preview.sub])
-        ])
-      );
 
       mount.appendChild(container);
     }
@@ -709,5 +627,3 @@ if (q.type === "form") renderForm(q, content, ui);
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 })();
-
-
