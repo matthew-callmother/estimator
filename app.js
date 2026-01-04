@@ -398,35 +398,53 @@
       content.appendChild(wrap);
     }
 
-    function renderForm(q, content) {
-      (q.fields || []).forEach((f) => {
-        const val = state.answers[f.id] || "";
-        const result = validateField(f, val);
+    function renderForm(q, content, ui) {
+  (q.fields || []).forEach((f) => {
+    const val = state.answers[f.id] || "";
 
-        content.appendChild(
-          mk("div", { class: "field" }, [
-            mk("label", { class: "fieldLabel" }, [f.label || f.id, f.help ? tooltip(f.help) : null]),
-            mk("input", {
-              type: f.input_type || "text",
-              value: val,
-              placeholder: f.placeholder || "",
-              autocomplete: f.autocomplete || "",
-              onInput: (e) => {
-                state.answers[f.id] = e.target.value;
+    const errEl = mk("div", { class: "fieldErr", style: "display:none" }, [""]);
 
-                if (String(f.id).startsWith("addr_")) {
-                  invalidatePermit(cfg, state);
-                }
+    const inputEl = mk("input", {
+      type: f.input_type || "text",
+      value: val,
+      placeholder: f.placeholder || "",
+      autocomplete: f.autocomplete || "",
+      onInput: (e) => {
+        state.answers[f.id] = e.target.value;
 
-                saveState(state);
-                scheduleRender();
-              }
-            }),
-            !result.ok && !isEmpty(val) ? mk("div", { class: "fieldErr" }, [result.msg]) : null
-          ])
-        );
-      });
-    }
+        // address changes invalidate permit/exact
+        if (String(f.id).startsWith("addr_")) invalidatePermit(cfg, state);
+
+        saveState(state);
+
+        // inline validate this field
+        const r = validateField(f, state.answers[f.id]);
+        if (!r.ok && !isEmpty(state.answers[f.id])) {
+          errEl.style.display = "block";
+          errEl.textContent = r.msg;
+        } else {
+          errEl.style.display = "none";
+          errEl.textContent = "";
+        }
+
+        // update Next disabled state
+        ui.updateNextDisabled();
+
+        // update footer pricing label (range vs exact) without rerender
+        ui.updatePreview();
+      }
+    });
+
+    content.appendChild(
+      mk("div", { class: "field" }, [
+        mk("label", { class: "fieldLabel" }, [f.label || f.id, f.help ? tooltip(f.help) : null]),
+        inputEl,
+        errEl
+      ])
+    );
+  });
+}
+
 
     function renderLoadingStep(q) {
       mount.innerHTML = "";
@@ -605,6 +623,7 @@
 
       const pr = sumPricing(cfg, qmap, state);
       const preview = computePreviewLabel(pr);
+      
 
       const container = mk("div", { class: "card" }, [
         mk("div", { class: "stepHeader" }, [
@@ -617,6 +636,23 @@
         ]),
         mk("div", { id: "step-content" })
       ]);
+      const previewTopLabel = container.querySelector(".previewTop span");
+const previewPriceEl  = container.querySelector(".previewPrice");
+const previewSubEl    = container.querySelector(".previewSub");
+const nextBtn         = container.querySelector(".nav .btn:not(.secondary)");
+
+const ui = {
+  updateNextDisabled: () => { nextBtn.disabled = !isQuestionComplete(q, state.answers); },
+  updatePreview: () => {
+    const pr = sumPricing(cfg, qmap, state);
+    const p = computePreviewLabel(pr);
+    previewTopLabel.textContent = p.label;
+    previewPriceEl.textContent  = p.value;
+    previewSubEl.textContent    = p.sub;
+  }
+};
+
+if (q.type === "form") renderForm(q, content, ui);
 
       const content = qs("#step-content", container);
 
@@ -626,6 +662,8 @@
       else if (q.type === "submit") content.appendChild(mk("div", { class: "note" }, [q.note || "Submit to lock in this estimate."]));
       else if (q.type === "content") content.appendChild(mk("div", { class: "contentBlock", html: q.html || "" }));
 
+      
+      
       // nav (not shown on loading lookup; we never render it here)
       const canGoBack = state.history.length > 0;
       const stepOk = isQuestionComplete(q, state.answers);
@@ -671,4 +709,5 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 })();
+
 
