@@ -50,12 +50,18 @@ module.exports = async function handler(req, res) {
       bookingId: result.id ?? result.bookingId ?? null
     });
   } catch (error) {
-    console.error("Booking submission failed", error);
+    console.error("Booking submission failed", {
+      message: error.message,
+      code: error.publicCode || "servicetitan_booking_failed",
+      statusCode: error.statusCode || 500,
+      diagnostics: error.diagnostics || null
+    });
     return res.status(error.statusCode || 500).json({
       error: error.statusCode
         ? error.message
         : "We received the request, but could not send it to ServiceTitan.",
-      code: error.publicCode || "servicetitan_booking_failed"
+      code: error.publicCode || "servicetitan_booking_failed",
+      diagnostics: error.diagnostics || null
     });
   }
 };
@@ -186,8 +192,9 @@ async function createServiceTitanBooking(booking) {
   const appKey = requireEnv("SERVICETITAN_APP_KEY");
   const token = await getAccessToken(env);
   const path = getBookingsPath();
+  const url = `${env.apiBaseUrl}/crm/v2/${path}/bookings`;
 
-  const response = await fetch(`${env.apiBaseUrl}/crm/v2/${path}/bookings`, {
+  const response = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -204,7 +211,23 @@ async function createServiceTitanBooking(booking) {
     const error = new Error(`ServiceTitan booking request failed with status ${response.status}.`);
     error.statusCode = 502;
     error.publicCode = "servicetitan_booking_rejected";
-    error.details = text;
+    error.diagnostics = {
+      service: "ServiceTitan bookings",
+      status: response.status,
+      statusText: response.statusText,
+      endpoint: redactServiceTitanUrl(url),
+      response: parseDiagnosticResponse(text),
+      requestShape: {
+        hasBookingProvider: Boolean(booking.bookingProvider),
+        hasName: Boolean(booking.name),
+        hasAddress: Boolean(booking.address),
+        contacts: Array.isArray(booking.contacts) ? booking.contacts.map((contact) => contact.type) : [],
+        hasBusinessUnitId: Boolean(booking.businessUnitId),
+        hasJobTypeId: Boolean(booking.jobTypeId),
+        hasCampaign: Boolean(booking.campaign),
+        hasExternalId: Boolean(booking.externalId)
+      }
+    };
     throw error;
   }
 
@@ -242,18 +265,34 @@ async function getAccessToken(env) {
     client_secret: requireEnv("SERVICETITAN_CLIENT_SECRET")
   });
 
-  const response = await fetch(`${env.authBaseUrl}/connect/token`, {
+  const url = `${env.authBaseUrl}/connect/token`;
+  const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: params
   });
 
-  const data = await response.json();
+  const text = await response.text();
+  const data = parseJsonResponse(text);
 
   if (!response.ok) {
     const error = new Error(`ServiceTitan token request failed with status ${response.status}.`);
     error.statusCode = 502;
     error.publicCode = "servicetitan_token_failed";
+    error.diagnostics = {
+      service: "ServiceTitan OAuth",
+      status: response.status,
+      statusText: response.statusText,
+      endpoint: redactServiceTitanUrl(url),
+      response: parseDiagnosticResponse(text),
+      environment: process.env.SERVICETITAN_ENV || "integration",
+      credentialShape: {
+        hasClientId: Boolean(process.env.SERVICETITAN_CLIENT_ID),
+        clientIdLength: String(process.env.SERVICETITAN_CLIENT_ID || "").length,
+        hasClientSecret: Boolean(process.env.SERVICETITAN_CLIENT_SECRET),
+        clientSecretLength: String(process.env.SERVICETITAN_CLIENT_SECRET || "").length
+      }
+    };
     throw error;
   }
 
@@ -283,8 +322,55 @@ function requireEnv(name) {
     const error = new Error(`Missing environment variable: ${name}`);
     error.statusCode = 500;
     error.publicCode = "missing_env";
+    error.diagnostics = {
+      missing: name,
+      configured: {
+        SERVICETITAN_ENV: Boolean(process.env.SERVICETITAN_ENV),
+        SERVICETITAN_CLIENT_ID: Boolean(process.env.SERVICETITAN_CLIENT_ID),
+        SERVICETITAN_CLIENT_SECRET: Boolean(process.env.SERVICETITAN_CLIENT_SECRET),
+        SERVICETITAN_APP_KEY: Boolean(process.env.SERVICETITAN_APP_KEY),
+        SERVICETITAN_TENANT_ID: Boolean(process.env.SERVICETITAN_TENANT_ID),
+        SERVICETITAN_BOOKING_PROVIDER: Boolean(process.env.SERVICETITAN_BOOKING_PROVIDER)
+      }
+    };
     throw error;
   }
 
   return value;
+}
+
+function parseDiagnosticResponse(text) {
+  if (!text) return null;
+
+  const parsed = parseJsonResponse(text);
+  if (Object.keys(parsed).length) return sanitizeDiagnostic(parsed);
+
+  return sanitizeDiagnostic(text);
+}
+
+function sanitizeDiagnostic(value) {
+  if (typeof value === "string") {
+    return value
+      .replace(/client_secret=[^&\s]+/gi, "client_secret=[redacted]")
+      .replace(/access_token[\"']?\s*[:=]\s*[\"']?[^\"'\s,}]+/gi, "access_token:[redacted]");
+  }
+
+  if (Array.isArray(value)) return value.map(sanitizeDiagnostic);
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => {
+        if (/secret|token|password|authorization/i.test(key)) {
+          return [key, "[redacted]"];
+        }
+        return [key, sanitizeDiagnostic(entry)];
+      })
+    );
+  }
+
+  return value;
+}
+
+function redactServiceTitanUrl(url) {
+  return String(url).replace(/tenant\/\d+/i, "tenant/[tenant]");
 }
