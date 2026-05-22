@@ -105,14 +105,13 @@ function validateBooking(form) {
 function buildServiceTitanBooking(form) {
   const businessUnitId = numberOrUndefined(process.env.SERVICETITAN_BUSINESS_UNIT_ID || 1357);
   const jobTypeId = numberOrUndefined(form.jobTypeId || process.env.SERVICETITAN_JOB_TYPE_ID);
-  const campaign = cleanString(form.campaign || process.env.SERVICETITAN_CAMPAIGN);
+  const campaignId = numberOrUndefined(form.campaignId || process.env.SERVICETITAN_CAMPAIGN_ID);
+  const campaignLabel = cleanString(form.campaignLabel || form.campaign || process.env.SERVICETITAN_CAMPAIGN);
   const source = cleanString(form.source || process.env.SERVICETITAN_SOURCE || "Website Estimator");
-  const bookingProvider = cleanString(process.env.SERVICETITAN_BOOKING_PROVIDER);
   const submittedAt = new Date().toISOString();
-  const summary = buildSummary(form, submittedAt);
+  const summary = buildSummary({ ...form, campaignLabel }, submittedAt);
 
   return removeEmptyValues({
-    bookingProvider,
     source,
     name: String(form.name).trim(),
     address: {
@@ -121,18 +120,18 @@ function buildServiceTitanBooking(form) {
       city: cleanString(form.city),
       state: cleanString(form.state),
       zip: cleanString(form.zip),
-      country: cleanString(form.country) || "United States"
+      country: formatCountry(cleanString(form.country) || "United States")
     },
     contacts: buildContacts(form),
     customerType: process.env.SERVICETITAN_CUSTOMER_TYPE || "Residential",
     start: submittedAt,
     summary,
-    campaign,
+    campaignId,
     businessUnitId,
     jobTypeId,
     priority: undefined,
     isFirstTimeClient: true,
-    sendConfirmationEmail: false,
+    isSendConfirmationEmail: false,
     externalId: `wh-booking-${randomUUID()}`
   });
 }
@@ -140,7 +139,7 @@ function buildServiceTitanBooking(form) {
 function buildContacts(form) {
   return [
     cleanString(form.phone) ? {
-      type: process.env.SERVICETITAN_PHONE_CONTACT_TYPE || "MobilePhone",
+      type: process.env.SERVICETITAN_PHONE_CONTACT_TYPE || "Phone",
       value: cleanString(form.phone),
       memo: "Estimator phone"
     } : null,
@@ -158,6 +157,7 @@ function buildSummary(form, submittedAt) {
     form.estimatorId ? `Estimator: ${form.estimatorId}` : null,
     form.priceRange ? `Estimated price range: ${form.priceRange}` : null,
     form.exactTotal !== undefined ? `Estimator exact total: $${form.exactTotal}` : null,
+    form.campaignLabel ? `Campaign: ${form.campaignLabel}` : null,
     form.permit ? `Permit: ${JSON.stringify(form.permit)}` : null,
     form.pageUrl ? `Page URL: ${form.pageUrl}` : null,
     form.submittedAt ? `Browser submitted at: ${form.submittedAt}` : null,
@@ -181,6 +181,13 @@ function numberOrUndefined(value) {
   return Number.isFinite(number) ? number : undefined;
 }
 
+function formatCountry(value) {
+  const country = cleanString(value);
+  if (!country) return "USA";
+  if (/^(united states|us|u\.s\.|u\.s\.a\.|usa)$/i.test(country)) return "USA";
+  return country;
+}
+
 function removeEmptyValues(value) {
   return Object.fromEntries(
     Object.entries(value).filter(([, entry]) => entry !== undefined && entry !== null && entry !== "")
@@ -191,9 +198,8 @@ async function createServiceTitanBooking(booking) {
   const env = getEnvironment();
   const appKey = requireEnv("SERVICETITAN_APP_KEY");
   const token = await getAccessToken(env);
-  const pathInfo = getBookingsPath();
-  const path = pathInfo.path;
-  const url = `${env.apiBaseUrl}/crm/v2/${path}/bookings`;
+  const endpointInfo = getBookingsEndpoint(env);
+  const url = endpointInfo.url;
 
   const response = await fetch(url, {
     method: "POST",
@@ -217,17 +223,15 @@ async function createServiceTitanBooking(booking) {
       status: response.status,
       statusText: response.statusText,
       endpoint: redactServiceTitanUrl(url),
-      pathMode: pathInfo.mode,
-      endpointTemplate: pathInfo.template,
+      endpointTemplate: endpointInfo.template,
       response: parseDiagnosticResponse(text),
       requestShape: {
-        hasBookingProvider: Boolean(booking.bookingProvider),
         hasName: Boolean(booking.name),
         hasAddress: Boolean(booking.address),
         contacts: Array.isArray(booking.contacts) ? booking.contacts.map((contact) => contact.type) : [],
         hasBusinessUnitId: Boolean(booking.businessUnitId),
         hasJobTypeId: Boolean(booking.jobTypeId),
-        hasCampaign: Boolean(booking.campaign),
+        hasCampaignId: Boolean(booking.campaignId),
         hasExternalId: Boolean(booking.externalId)
       }
     };
@@ -237,22 +241,12 @@ async function createServiceTitanBooking(booking) {
   return data;
 }
 
-function getBookingsPath() {
-  const bookingProvider = cleanString(process.env.SERVICETITAN_BOOKING_PROVIDER);
-  const mode = process.env.SERVICETITAN_BOOKING_PATH_MODE || "tenant";
-
-  if (mode === "booking_provider") {
-    return {
-      mode,
-      template: "/crm/v2/{booking_provider}/bookings",
-      path: bookingProvider || requireEnv("SERVICETITAN_BOOKING_PROVIDER")
-    };
-  }
-
+function getBookingsEndpoint(env) {
+  const tenantId = cleanString(requireEnv("SERVICETITAN_TENANT_ID"));
+  const bookingProvider = cleanString(requireEnv("SERVICETITAN_BOOKING_PROVIDER"));
   return {
-    mode,
-    template: "/crm/v2/tenant/{tenant}/bookings",
-    path: `tenant/${requireEnv("SERVICETITAN_TENANT_ID")}`
+    template: "/crm/v2/tenant/{tenant}/booking-provider/{booking_provider}/bookings",
+    url: `${env.apiBaseUrl}/crm/v2/tenant/${encodeURIComponent(tenantId)}/booking-provider/${encodeURIComponent(bookingProvider)}/bookings`
   };
 }
 
