@@ -1,0 +1,10 @@
+{
+  "name": "estimator",
+  "private": true,
+  "scripts": {
+    "check": "node --check api/bookings.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
