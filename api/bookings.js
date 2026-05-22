@@ -191,7 +191,8 @@ async function createServiceTitanBooking(booking) {
   const env = getEnvironment();
   const appKey = requireEnv("SERVICETITAN_APP_KEY");
   const token = await getAccessToken(env);
-  const path = getBookingsPath();
+  const pathInfo = getBookingsPath();
+  const path = pathInfo.path;
   const url = `${env.apiBaseUrl}/crm/v2/${path}/bookings`;
 
   const response = await fetch(url, {
@@ -216,6 +217,7 @@ async function createServiceTitanBooking(booking) {
       status: response.status,
       statusText: response.statusText,
       endpoint: redactServiceTitanUrl(url),
+      pathMode: pathInfo.mode,
       response: parseDiagnosticResponse(text),
       requestShape: {
         hasBookingProvider: Boolean(booking.bookingProvider),
@@ -235,13 +237,20 @@ async function createServiceTitanBooking(booking) {
 }
 
 function getBookingsPath() {
-  const mode = process.env.SERVICETITAN_BOOKING_PATH_MODE || "tenant";
+  const bookingProvider = cleanString(process.env.SERVICETITAN_BOOKING_PROVIDER);
+  const mode = process.env.SERVICETITAN_BOOKING_PATH_MODE || (bookingProvider ? "booking_provider" : "tenant");
 
   if (mode === "booking_provider") {
-    return requireEnv("SERVICETITAN_BOOKING_PROVIDER");
+    return {
+      mode,
+      path: bookingProvider || requireEnv("SERVICETITAN_BOOKING_PROVIDER")
+    };
   }
 
-  return `tenant/${requireEnv("SERVICETITAN_TENANT_ID")}`;
+  return {
+    mode,
+    path: `tenant/${requireEnv("SERVICETITAN_TENANT_ID")}`
+  };
 }
 
 function parseJsonResponse(text) {
