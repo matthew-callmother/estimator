@@ -1,9 +1,10 @@
 (function () {
   "use strict";
 
-  const BOOKING_ENDPOINT = "/api/bookings";
-  const CONFIG_URL = "https://matthew-callmother.github.io/estimator/config.json";
-  const MUNICIPALITIES_URL = "https://matthew-callmother.github.io/estimator/municipalities-dfw.json";
+  const SCRIPT_DATA = document.currentScript?.dataset || {};
+  const DEFAULT_BOOKING_ENDPOINT = "https://estimator-sage-xi.vercel.app/api/bookings";
+  const DEFAULT_CONFIG_URL = "https://matthew-callmother.github.io/estimator/config.json";
+  const DEFAULT_MUNICIPALITIES_URL = "https://matthew-callmother.github.io/estimator/municipalities-dfw.json";
 
   const MOUNT_ID = "wh-estimator";
   const STORAGE_KEY = "wh_estimator_routing_state";
@@ -14,6 +15,23 @@
   const normalizePhone = (s) => String(s || "").replace(/\D/g, "");
   const isEmpty = (v) => v === null || v === undefined || String(v).trim() === "";
   const safeStr = (v) => String(v == null ? "" : v).trim();
+
+  function getConfigUrl() {
+    return window.WH_ESTIMATOR_CONFIG_URL || SCRIPT_DATA.configUrl || DEFAULT_CONFIG_URL;
+  }
+
+  function getMunicipalitiesUrl() {
+    return window.WH_ESTIMATOR_MUNICIPALITIES_URL || SCRIPT_DATA.municipalitiesUrl || DEFAULT_MUNICIPALITIES_URL;
+  }
+
+  function getBookingEndpoint() {
+    return window.WH_ESTIMATOR_BOOKING_ENDPOINT || SCRIPT_DATA.bookingEndpoint || DEFAULT_BOOKING_ENDPOINT;
+  }
+
+  function getStorageKey(cfg) {
+    const estimatorId = cfg?.estimatorId || cfg?.meta?.estimatorId || "default";
+    return `${STORAGE_KEY}:${estimatorId}`;
+  }
 
   // mk() ignores null/undefined/false and flattens arrays
   const mk = (tag, attrs = {}, children = []) => {
@@ -85,7 +103,7 @@
   let MUNICACHE = null;
   async function loadMunicipalities() {
     if (MUNICACHE) return MUNICACHE;
-    MUNICACHE = await fetchJSON(MUNICIPALITIES_URL);
+    MUNICACHE = await fetchJSON(getMunicipalitiesUrl());
     return MUNICACHE;
   }
 
@@ -131,8 +149,23 @@
     }
   }
 
-  function saveState(state) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  function loadEstimatorState(cfg) {
+    try {
+      const raw = localStorage.getItem(getStorageKey(cfg));
+      if (!raw) return loadState();
+      const parsed = JSON.parse(raw);
+      return {
+        ...defaultState(),
+        ...parsed,
+        meta: { ...defaultState().meta, ...(parsed.meta || {}) }
+      };
+    } catch {
+      return defaultState();
+    }
+  }
+
+  function saveState(state, cfg) {
+    localStorage.setItem(getStorageKey(cfg), JSON.stringify(state));
   }
 
   /* ---------------- Config helpers ---------------- */
@@ -262,7 +295,7 @@
 
     let cfg, qmap;
     try {
-      cfg = await fetchJSON(CONFIG_URL);
+      cfg = await fetchJSON(getConfigUrl());
       qmap = indexQuestions(cfg);
     } catch (e) {
       console.error(e);
@@ -270,7 +303,7 @@
       return;
     }
 
-    const state = loadState();
+    const state = loadEstimatorState(cfg);
 
     if (!state.currentId) state.currentId = cfg.start || (cfg.questions?.[0]?.id ?? null);
     if (!state.currentId) {
@@ -332,7 +365,7 @@
               class: `choice ${active ? "active" : ""} ${opt.image_url ? "hasImg" : ""}`,
               onClick: () => {
                 state.answers[q.id] = String(opt.value);
-                saveState(state);
+                saveState(state, cfg);
                 scheduleRender();
               }
             },
@@ -367,7 +400,7 @@
                 state.answers[f.id] = e.target.value;
         
                 if (String(f.id).startsWith("addr_")) invalidatePermit(cfg, state);
-                saveState(state);
+                saveState(state, cfg);
         
                 const r = validateField(f, state.answers[f.id]);
                 if (!r.ok && !isEmpty(state.answers[f.id])) {
@@ -440,8 +473,7 @@
       const current = q;
 
       if (current.type === "submit") {
-        await submitPayload();
-        return;
+        return await submitPayload();
       }
 
       if (!isQuestionComplete(current, state.answers)) return;
@@ -485,7 +517,7 @@
             state.history.push(state.currentId);
             state.currentId = afterId;
           }
-          saveState(state);
+          saveState(state, cfg);
           scheduleRender();
         }, remaining + 200);
 
@@ -495,30 +527,51 @@
       state.history.push(state.currentId);
       state.currentId = nextId;
 
-      saveState(state);
+      saveState(state, cfg);
       scheduleRender();
     }
 
     function handleBack() {
       if (!state.history.length) return;
       state.currentId = state.history.pop();
-      saveState(state);
+      saveState(state, cfg);
       scheduleRender();
     }
 
     function buildBookingPayload(pr) {
+      const estimatorId = cfg.estimatorId || cfg.meta?.estimatorId || "water-heater";
+      const serviceName = cfg.serviceName || cfg.meta?.serviceName || "Water heater estimate request";
+
       return {
+        estimatorId,
+        serviceName,
         name: state.answers.contact_name,
         phone: state.answers.contact_phone,
         email: state.answers.contact_email,
         street: state.answers.addr_street,
+        unit: state.answers.addr_unit,
         city: state.answers.addr_city,
         state: state.answers.addr_state,
         zip: state.answers.addr_zip,
-        service: "Water heater estimate request",
+        country: state.answers.addr_country || cfg.defaultCountry || "United States",
+        source: cfg.source,
+        campaign: cfg.campaign,
+        jobTypeId: cfg.jobTypeId,
+        service: serviceName,
         priceRange: `$${money(pr.low)}-$${money(pr.high)}`,
+        exactTotal: pr.exact,
+        pricing: { low: pr.low, high: pr.high, exact: pr.exact },
         questionId: state.currentId,
         answers: state.answers,
+        permit: {
+          done: state.meta.permit_done,
+          city: state.answers.municipality_city,
+          found: state.answers.municipality_found,
+          fee: state.answers.permit_fee_usd,
+          expansionTankRequired: state.answers.expansion_tank_required
+        },
+        pageUrl: location.href,
+        submittedAt: new Date().toISOString(),
         notes: [
           state.meta.permit_done ? "Permit lookup completed." : "Permit lookup not completed.",
           `Estimator exact total: $${money(pr.exact)}`
@@ -526,25 +579,39 @@
       };
     }
 
+    function showSubmitMessage(el, type, text) {
+      if (!el) return;
+      el.style.display = "block";
+      el.className = `note submitMessage ${type}`;
+      el.textContent = text;
+    }
+
     async function submitPayload() {
       const pr = sumPricing(cfg, qmap, state);
       const payload = buildBookingPayload(pr);
 
-      const response = await fetch(BOOKING_ENDPOINT, {
+      const response = await fetch(getBookingEndpoint(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
-        throw new Error(`Booking request failed with status ${response.status}`);
+        let message = `Booking request failed with status ${response.status}`;
+        try {
+          const data = await response.json();
+          if (data?.error) message = data.error;
+        } catch {
+          // Keep the generic status message when the endpoint did not return JSON.
+        }
+        throw new Error(message);
       }
 
-      alert("Submitted! We'll reach out shortly.");
+      return await response.json().catch(() => ({ ok: true }));
     }
 
     function render() {
-      saveState(state);
+      saveState(state, cfg);
     
       const q = getQuestion(qmap, state.currentId);
       if (!q) {
@@ -555,7 +622,7 @@
       // refresh-on-loading: skip
       if (q.type === "loading_lookup") {
         state.currentId = q.next || state.currentId;
-        saveState(state);
+        saveState(state, cfg);
         scheduleRender();
         return;
       }
@@ -584,8 +651,44 @@
       const canGoBack = state.history.length > 0;
       const nextLabel = q.next_label || (q.type === "submit" ? (q.submit_label || "Submit") : "Next");
     
+      const submitMessage = mk("div", { class: "note submitMessage", style: "display:none" }, [""]);
       const backBtn = mk("button", { class: "btn secondary", disabled: !canGoBack, onClick: handleBack }, ["Back"]);
-      const nextBtn = mk("button", { class: "btn", disabled: !isQuestionComplete(q, state.answers), onClick: () => handleNext(q) }, [nextLabel]);
+      const nextBtn = mk("button", {
+        class: "btn",
+        disabled: !isQuestionComplete(q, state.answers),
+        onClick: async () => {
+          nextBtn.disabled = true;
+          const originalLabel = nextBtn.textContent;
+          if (q.type === "submit") {
+            nextBtn.textContent = "Submitting...";
+            showSubmitMessage(submitMessage, "pending", "Sending your estimate...");
+          }
+
+          try {
+            const result = await handleNext(q);
+            if (q.type === "submit") {
+              showSubmitMessage(
+                submitMessage,
+                "success",
+                result?.dryRun
+                  ? "Test submission received. Dry run is on, so nothing was sent to ServiceTitan."
+                  : "Submitted. We'll reach out shortly."
+              );
+              nextBtn.textContent = "Submitted";
+              return;
+            }
+          } catch (error) {
+            console.error(error);
+            if (q.type === "submit") {
+              showSubmitMessage(submitMessage, "error", error?.message || "We couldn't submit this estimate. Please try again.");
+            } else {
+              alert(error?.message || "We couldn't submit this estimate. Please try again.");
+            }
+            nextBtn.disabled = !isQuestionComplete(q, state.answers);
+            nextBtn.textContent = originalLabel;
+          }
+        }
+      }, [nextLabel]);
     
       const nav = mk("div", { class: "nav" }, [backBtn, nextBtn]);
     
@@ -618,7 +721,7 @@
       else if (q.type === "submit") content.appendChild(mk("div", { class: "note" }, [q.note || "Submit to lock in this estimate."]));
       else if (q.type === "content") content.appendChild(mk("div", { class: "contentBlock", html: q.html || "" }));
     
-      const container = mk("div", { class: "card" }, [header, content, nav, previewEl]);
+      const container = mk("div", { class: "card" }, [header, content, submitMessage, nav, previewEl]);
       mount.appendChild(container);
     }
 
