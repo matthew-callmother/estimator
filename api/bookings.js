@@ -261,8 +261,8 @@ async function getAccessToken(env) {
 
   const params = new URLSearchParams({
     grant_type: "client_credentials",
-    client_id: requireEnv("SERVICETITAN_CLIENT_ID"),
-    client_secret: requireEnv("SERVICETITAN_CLIENT_SECRET")
+    client_id: requireEnv("SERVICETITAN_CLIENT_ID").trim(),
+    client_secret: requireEnv("SERVICETITAN_CLIENT_SECRET").trim()
   });
 
   const url = `${env.authBaseUrl}/connect/token`;
@@ -289,8 +289,12 @@ async function getAccessToken(env) {
       credentialShape: {
         hasClientId: Boolean(process.env.SERVICETITAN_CLIENT_ID),
         clientIdLength: String(process.env.SERVICETITAN_CLIENT_ID || "").length,
+        clientIdTrimmedLength: String(process.env.SERVICETITAN_CLIENT_ID || "").trim().length,
+        clientIdHasOuterWhitespace: hasOuterWhitespace(process.env.SERVICETITAN_CLIENT_ID),
         hasClientSecret: Boolean(process.env.SERVICETITAN_CLIENT_SECRET),
-        clientSecretLength: String(process.env.SERVICETITAN_CLIENT_SECRET || "").length
+        clientSecretLength: String(process.env.SERVICETITAN_CLIENT_SECRET || "").length,
+        clientSecretTrimmedLength: String(process.env.SERVICETITAN_CLIENT_SECRET || "").trim().length,
+        clientSecretHasOuterWhitespace: hasOuterWhitespace(process.env.SERVICETITAN_CLIENT_SECRET)
       }
     };
     throw error;
@@ -337,6 +341,11 @@ function requireEnv(name) {
   }
 
   return value;
+}
+
+function hasOuterWhitespace(value) {
+  if (value === undefined || value === null) return false;
+  return String(value) !== String(value).trim();
 }
 
 function parseDiagnosticResponse(text) {
