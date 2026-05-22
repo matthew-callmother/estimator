@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const ZAPIER_WEBHOOK_URL = "PASTE_YOUR_ZAPIER_CATCH_HOOK_URL_HERE";
+  const BOOKING_ENDPOINT = "/api/bookings";
   const CONFIG_URL = "https://matthew-callmother.github.io/estimator/config.json";
   const MUNICIPALITIES_URL = "https://matthew-callmother.github.io/estimator/municipalities-dfw.json";
 
@@ -311,10 +311,10 @@
       }
 
       if (pr.low === 0 && pr.high === 0) {
-        return { mode: "empty", label: "Estimated Range", value: "—", sub: "Answer a few questions to see your range.", disclaimer };
+        return { mode: "empty", label: "Estimated Range", value: "â€”", sub: "Answer a few questions to see your range.", disclaimer };
       }
 
-      return { mode: "range", label: "Estimated Range", value: `$${money(pr.low)}–$${money(pr.high)}`, sub: "Range updates as you go. Add your address to get an exact number.", disclaimer };
+      return { mode: "range", label: "Estimated Range", value: `$${money(pr.low)}â€“$${money(pr.high)}`, sub: "Range updates as you go. Add your address to get an exact number.", disclaimer };
     }
 
     function renderSingleSelect(q, content) {
@@ -414,7 +414,7 @@
         mk("div", { class: "loading" }, [
           mk("div", { class: "loadingInner" }, [
             mk("div", { class: "spinner" }),
-            mk("div", { class: "loadingTitle" }, [q.title || "Checking…"]),
+            mk("div", { class: "loadingTitle" }, [q.title || "Checkingâ€¦"]),
             q.subtitle ? mk("div", { class: "loadingSub" }, [q.subtitle]) : null,
             mk("div", { class: "loadBar" }, [mk("div", { id: fillId, class: "loadFill", style: "width:0%" })])
           ])
@@ -506,29 +506,39 @@
       scheduleRender();
     }
 
+    function buildBookingPayload(pr) {
+      return {
+        name: state.answers.contact_name,
+        phone: state.answers.contact_phone,
+        email: state.answers.contact_email,
+        street: state.answers.addr_street,
+        city: state.answers.addr_city,
+        state: state.answers.addr_state,
+        zip: state.answers.addr_zip,
+        service: "Water heater estimate request",
+        priceRange: `$${money(pr.low)}-$${money(pr.high)}`,
+        questionId: state.currentId,
+        answers: state.answers,
+        notes: [
+          state.meta.permit_done ? "Permit lookup completed." : "Permit lookup not completed.",
+          `Estimator exact total: $${money(pr.exact)}`
+        ].join(" ")
+      };
+    }
+
     async function submitPayload() {
       const pr = sumPricing(cfg, qmap, state);
+      const payload = buildBookingPayload(pr);
 
-      const payload = {
-        answers: state.answers,
-        meta: {
-          url: location.href,
-          ts: new Date().toISOString(),
-          permit_done: state.meta.permit_done
-        },
-        pricing: { low: pr.low, high: pr.high, exact: pr.exact }
-      };
-
-      if (!ZAPIER_WEBHOOK_URL || String(ZAPIER_WEBHOOK_URL).includes("PASTE_YOUR_")) {
-        alert("Submitted (dev mode). Add your Zapier URL to send.");
-        return;
-      }
-
-      await fetch(ZAPIER_WEBHOOK_URL, {
+      const response = await fetch(BOOKING_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
+
+      if (!response.ok) {
+        throw new Error(`Booking request failed with status ${response.status}`);
+      }
 
       alert("Submitted! We'll reach out shortly.");
     }
