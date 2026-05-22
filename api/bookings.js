@@ -1,3 +1,5 @@
+const { randomUUID } = require("crypto");
+
 let cachedToken = null;
 
 const ENVIRONMENTS = {
@@ -33,11 +35,11 @@ module.exports = async function handler(req, res) {
     const booking = buildServiceTitanBooking(form);
 
     if (process.env.SERVICETITAN_DRY_RUN === "true") {
-      console.log("ServiceTitan booking dry run", JSON.stringify(booking));
       return res.status(200).json({
         ok: true,
         dryRun: true,
-        message: "Booking accepted. Dry run is enabled, so nothing was sent to ServiceTitan."
+        message: "Booking accepted. Dry run is enabled, so nothing was sent to ServiceTitan.",
+        booking
       });
     }
 
@@ -49,8 +51,10 @@ module.exports = async function handler(req, res) {
     });
   } catch (error) {
     console.error("Booking submission failed", error);
-    return res.status(500).json({
-      error: "We received the request, but could not send it to ServiceTitan."
+    return res.status(error.statusCode || 500).json({
+      error: error.statusCode
+        ? error.message
+        : "We received the request, but could not send it to ServiceTitan."
     });
   }
 };
@@ -63,7 +67,15 @@ function setCorsHeaders(res) {
 
 function readBody(req) {
   if (!req.body) return {};
-  if (typeof req.body === "string") return JSON.parse(req.body);
+  if (typeof req.body === "string") {
+    try {
+      return JSON.parse(req.body);
+    } catch {
+      const error = new Error("Request body must be valid JSON.");
+      error.statusCode = 400;
+      throw error;
+    }
+  }
   return req.body;
 }
 
@@ -76,43 +88,78 @@ function validateBooking(form) {
     return "Please include a phone number or email.";
   }
 
-  if (!form.address && !form.street) {
-    return "Please include the service address.";
+  if (!form.street || !form.city || !form.state || !form.zip) {
+    return "Please include the complete service address.";
   }
 
   return null;
 }
 
 function buildServiceTitanBooking(form) {
-  const notes = [
-    form.notes,
-    form.priceRange ? `Estimated price range: ${form.priceRange}` : null,
-    form.preferredTime ? `Preferred time: ${form.preferredTime}` : null,
-    form.questionId ? `Submitted from question: ${form.questionId}` : null,
-    form.answers ? `Questionnaire answers: ${JSON.stringify(form.answers)}` : null
-  ].filter(Boolean).join("\n");
+  const businessUnitId = numberOrUndefined(process.env.SERVICETITAN_BUSINESS_UNIT_ID || 1357);
+  const jobTypeId = numberOrUndefined(form.jobTypeId || process.env.SERVICETITAN_JOB_TYPE_ID);
+  const campaign = cleanString(form.campaign || process.env.SERVICETITAN_CAMPAIGN);
+  const source = cleanString(form.source || process.env.SERVICETITAN_SOURCE || "Website Estimator");
+  const bookingProvider = cleanString(process.env.SERVICETITAN_BOOKING_PROVIDER);
+  const submittedAt = new Date().toISOString();
+  const summary = buildSummary(form, submittedAt);
 
   return removeEmptyValues({
+    bookingProvider,
+    source,
     name: String(form.name).trim(),
-    summary: form.service || "Website booking request",
-    phone: cleanString(form.phone),
-    email: cleanString(form.email),
-    address: normalizeAddress(form),
-    notes,
-    businessUnitId: numberOrUndefined(form.businessUnitId || process.env.SERVICETITAN_BUSINESS_UNIT_ID),
-    jobTypeId: numberOrUndefined(form.jobTypeId || process.env.SERVICETITAN_JOB_TYPE_ID),
-    campaignId: numberOrUndefined(form.campaignId || process.env.SERVICETITAN_CAMPAIGN_ID),
-    source: form.source || "Website"
+    address: {
+      street: cleanString(form.street),
+      unit: cleanString(form.unit),
+      city: cleanString(form.city),
+      state: cleanString(form.state),
+      zip: cleanString(form.zip),
+      country: cleanString(form.country) || "United States"
+    },
+    contacts: buildContacts(form),
+    customerType: process.env.SERVICETITAN_CUSTOMER_TYPE || "Residential",
+    start: submittedAt,
+    summary,
+    campaign,
+    businessUnitId,
+    jobTypeId,
+    priority: undefined,
+    isFirstTimeClient: true,
+    sendConfirmationEmail: false,
+    externalId: `wh-booking-${randomUUID()}`
   });
 }
 
-function normalizeAddress(form) {
-  if (form.address) return cleanString(form.address);
+function buildContacts(form) {
+  return [
+    cleanString(form.phone) ? {
+      type: process.env.SERVICETITAN_PHONE_CONTACT_TYPE || "MobilePhone",
+      value: cleanString(form.phone),
+      memo: "Estimator phone"
+    } : null,
+    cleanString(form.email) ? {
+      type: "Email",
+      value: cleanString(form.email),
+      memo: "Estimator email"
+    } : null
+  ].filter(Boolean);
+}
 
-  const street = [form.street, form.unit].map(cleanString).filter(Boolean).join(" ");
-  const cityStateZip = [form.city, form.state, form.zip].map(cleanString).filter(Boolean).join(", ");
+function buildSummary(form, submittedAt) {
+  const lines = [
+    form.serviceName || form.service || "Website booking request",
+    form.estimatorId ? `Estimator: ${form.estimatorId}` : null,
+    form.priceRange ? `Estimated price range: ${form.priceRange}` : null,
+    form.exactTotal !== undefined ? `Estimator exact total: $${form.exactTotal}` : null,
+    form.permit ? `Permit: ${JSON.stringify(form.permit)}` : null,
+    form.pageUrl ? `Page URL: ${form.pageUrl}` : null,
+    form.submittedAt ? `Browser submitted at: ${form.submittedAt}` : null,
+    `Server submitted at: ${submittedAt}`,
+    form.notes,
+    form.answers ? `Questionnaire answers: ${JSON.stringify(form.answers)}` : null
+  ];
 
-  return [street, cityStateZip].filter(Boolean).join(", ");
+  return lines.filter(Boolean).join("\n");
 }
 
 function cleanString(value) {
@@ -135,10 +182,9 @@ function removeEmptyValues(value) {
 
 async function createServiceTitanBooking(booking) {
   const env = getEnvironment();
-  const tenantId = requireEnv("SERVICETITAN_TENANT_ID");
   const appKey = requireEnv("SERVICETITAN_APP_KEY");
   const token = await getAccessToken(env);
-  const path = getBookingsPath(tenantId);
+  const path = getBookingsPath();
 
   const response = await fetch(`${env.apiBaseUrl}/crm/v2/${path}/bookings`, {
     method: "POST",
@@ -151,7 +197,7 @@ async function createServiceTitanBooking(booking) {
   });
 
   const text = await response.text();
-  const data = text ? JSON.parse(text) : {};
+  const data = parseJsonResponse(text);
 
   if (!response.ok) {
     throw new Error(`ServiceTitan returned ${response.status}: ${text}`);
@@ -160,14 +206,24 @@ async function createServiceTitanBooking(booking) {
   return data;
 }
 
-function getBookingsPath(tenantId) {
+function getBookingsPath() {
   const mode = process.env.SERVICETITAN_BOOKING_PATH_MODE || "tenant";
 
   if (mode === "booking_provider") {
-    return `tenant/${tenantId}/${requireEnv("SERVICETITAN_BOOKING_PROVIDER")}`;
+    return requireEnv("SERVICETITAN_BOOKING_PROVIDER");
   }
 
-  return `tenant/${tenantId}`;
+  return `tenant/${requireEnv("SERVICETITAN_TENANT_ID")}`;
+}
+
+function parseJsonResponse(text) {
+  if (!text) return {};
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {};
+  }
 }
 
 async function getAccessToken(env) {
