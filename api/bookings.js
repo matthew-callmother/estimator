@@ -54,7 +54,8 @@ module.exports = async function handler(req, res) {
     return res.status(error.statusCode || 500).json({
       error: error.statusCode
         ? error.message
-        : "We received the request, but could not send it to ServiceTitan."
+        : "We received the request, but could not send it to ServiceTitan.",
+      code: error.publicCode || "servicetitan_booking_failed"
     });
   }
 };
@@ -200,7 +201,11 @@ async function createServiceTitanBooking(booking) {
   const data = parseJsonResponse(text);
 
   if (!response.ok) {
-    throw new Error(`ServiceTitan returned ${response.status}: ${text}`);
+    const error = new Error(`ServiceTitan booking request failed with status ${response.status}.`);
+    error.statusCode = 502;
+    error.publicCode = "servicetitan_booking_rejected";
+    error.details = text;
+    throw error;
   }
 
   return data;
@@ -246,7 +251,10 @@ async function getAccessToken(env) {
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(`ServiceTitan token request failed: ${response.status}`);
+    const error = new Error(`ServiceTitan token request failed with status ${response.status}.`);
+    error.statusCode = 502;
+    error.publicCode = "servicetitan_token_failed";
+    throw error;
   }
 
   cachedToken = {
@@ -272,7 +280,10 @@ function requireEnv(name) {
   const value = process.env[name];
 
   if (!value) {
-    throw new Error(`Missing environment variable: ${name}`);
+    const error = new Error(`Missing environment variable: ${name}`);
+    error.statusCode = 500;
+    error.publicCode = "missing_env";
+    throw error;
   }
 
   return value;
