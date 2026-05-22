@@ -218,6 +218,7 @@ async function createServiceTitanBooking(booking) {
       statusText: response.statusText,
       endpoint: redactServiceTitanUrl(url),
       pathMode: pathInfo.mode,
+      endpointTemplate: pathInfo.template,
       response: parseDiagnosticResponse(text),
       requestShape: {
         hasBookingProvider: Boolean(booking.bookingProvider),
@@ -238,17 +239,19 @@ async function createServiceTitanBooking(booking) {
 
 function getBookingsPath() {
   const bookingProvider = cleanString(process.env.SERVICETITAN_BOOKING_PROVIDER);
-  const mode = process.env.SERVICETITAN_BOOKING_PATH_MODE || (bookingProvider ? "booking_provider" : "tenant");
+  const mode = process.env.SERVICETITAN_BOOKING_PATH_MODE || "tenant";
 
   if (mode === "booking_provider") {
     return {
       mode,
+      template: "/crm/v2/{booking_provider}/bookings",
       path: bookingProvider || requireEnv("SERVICETITAN_BOOKING_PROVIDER")
     };
   }
 
   return {
     mode,
+    template: "/crm/v2/tenant/{tenant}/bookings",
     path: `tenant/${requireEnv("SERVICETITAN_TENANT_ID")}`
   };
 }
