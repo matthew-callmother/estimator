@@ -8,6 +8,7 @@
 
   const MOUNT_ID = "wh-estimator";
   const STORAGE_KEY = "wh_estimator_routing_state";
+  const PROGRESS_COUNTED_TYPES = new Set(["single_select", "form", "summary"]);
 
   /* ---------------- Helpers ---------------- */
   const qs = (sel, root = document) => root.querySelector(sel);
@@ -183,6 +184,93 @@
     return (q?.options || []).find((o) => String(o.value) === String(value)) || null;
   }
 
+  function uniqueValues(values) {
+    return [...new Set(values.filter(Boolean))];
+  }
+
+  function getAllNextQuestionIds(q) {
+    if (!q) return [];
+
+    const optionNextIds = q.type === "single_select"
+      ? (q.options || []).map((opt) => opt.next)
+      : [];
+
+    return uniqueValues([...optionNextIds, q.next]);
+  }
+
+  function getResolvedNextQuestionIds(q, answers) {
+    if (!q) return [];
+
+    if (q.type === "single_select") {
+      const opt = getOption(q, answers?.[q.id]);
+      if (opt?.next) return [opt.next];
+    }
+
+    return q.next ? [q.next] : [];
+  }
+
+  function isProgressCountedQuestion(q) {
+    return !!q && PROGRESS_COUNTED_TYPES.has(q.type);
+  }
+
+  function isCurrentProgressStepComplete(q, answers) {
+    if (!isProgressCountedQuestion(q)) return false;
+    if (q.type === "summary") return false;
+    return isQuestionComplete(q, answers);
+  }
+
+  function longestCountedPathFrom(qmap, id, seen = new Set()) {
+    const q = getQuestion(qmap, id);
+    if (!q || seen.has(id)) return 0;
+
+    const nextSeen = new Set(seen);
+    nextSeen.add(id);
+
+    const ownStep = isProgressCountedQuestion(q) ? 1 : 0;
+    const nextIds = getAllNextQuestionIds(q);
+    const longestNext = nextIds.reduce(
+      (longest, nextId) => Math.max(longest, longestCountedPathFrom(qmap, nextId, nextSeen)),
+      0
+    );
+
+    return ownStep + longestNext;
+  }
+
+  function calculateProgress(qmap, state) {
+    const q = getQuestion(qmap, state.currentId);
+    const completedHistory = (state.history || []).reduce((count, id) => {
+      return count + (isProgressCountedQuestion(getQuestion(qmap, id)) ? 1 : 0);
+    }, 0);
+
+    const currentComplete = isCurrentProgressStepComplete(q, state.answers);
+    const currentCompleted = currentComplete ? 1 : 0;
+    const completed = completedHistory + currentCompleted;
+
+    const remaining = currentComplete
+      ? getResolvedNextQuestionIds(q, state.answers).reduce(
+        (longest, nextId) => Math.max(longest, longestCountedPathFrom(qmap, nextId)),
+        0
+      )
+      : longestCountedPathFrom(qmap, state.currentId);
+
+    const total = Math.max(completed + remaining, completed, 1);
+    const currentStep = isProgressCountedQuestion(q) && !currentComplete
+      ? Math.min(completed + 1, total)
+      : Math.min(Math.max(completed, 1), total);
+    const percent = Math.max(0, Math.min(100, Math.round((completed / total) * 100)));
+
+    return { completed, currentStep, total, percent };
+  }
+
+  function renderProgress(progress) {
+    return mk("div", { class: "progressWrap" }, [
+      mk("div", { class: "progressMeta" }, [`Step ${progress.currentStep} of ${progress.total}`]),
+      mk("div", { class: "progressBar" }, [
+        mk("div", { class: "progressFill", style: `width:${progress.percent}%` })
+      ])
+    ]);
+  }
+
   /* ---------------- Pricing ---------------- */
   function sumPricing(cfg, qmap, state) {
     let low = 0, high = 0, exact = 0;
@@ -311,11 +399,6 @@
       return;
     }
 
-    const getStepIndex = () => {
-      const path = [...state.history, state.currentId];
-      return { i: path.length, total: Math.max(path.length, 1) };
-    };
-
     let renderQueued = false;
     const scheduleRender = () => {
       if (renderQueued) return;
@@ -344,10 +427,10 @@
       }
 
       if (pr.low === 0 && pr.high === 0) {
-        return { mode: "empty", label: "Estimated Range", value: "â€”", sub: "Answer a few questions to see your range.", disclaimer };
+        return { mode: "empty", label: "Estimated Range", value: "—", sub: "Answer a few questions to see your range.", disclaimer };
       }
 
-      return { mode: "range", label: "Estimated Range", value: `$${money(pr.low)}â€“$${money(pr.high)}`, sub: "Range updates as you go. Add your address to get an exact number.", disclaimer };
+      return { mode: "range", label: "Estimated Range", value: `$${money(pr.low)}–$${money(pr.high)}`, sub: "Range updates as you go. Add your address to get an exact number.", disclaimer };
     }
 
     function renderSingleSelect(q, content) {
@@ -434,20 +517,16 @@
       const start = Date.now();
       const fillId = `loadfill_${q.id}`;
 
-      const { i, total } = getStepIndex();
-      const pct = total ? Math.round((i / total) * 100) : 0;
+      const progress = calculateProgress(qmap, state);
 
       const card = mk("div", { class: "card" }, [
         mk("div", { class: "stepHeader" }, [
-          mk("div", { class: "progressWrap" }, [
-            mk("div", { class: "progressMeta" }, [`Step ${i} of ${total}`]),
-            mk("div", { class: "progressBar" }, [mk("div", { class: "progressFill", style: `width:${pct}%` })])
-          ])
+          renderProgress(progress)
         ]),
         mk("div", { class: "loading" }, [
           mk("div", { class: "loadingInner" }, [
             mk("div", { class: "spinner" }),
-            mk("div", { class: "loadingTitle" }, [q.title || "Checkingâ€¦"]),
+            mk("div", { class: "loadingTitle" }, [q.title || "Checking…"]),
             q.subtitle ? mk("div", { class: "loadingSub" }, [q.subtitle]) : null,
             mk("div", { class: "loadBar" }, [mk("div", { id: fillId, class: "loadFill", style: "width:0%" })])
           ])
@@ -556,6 +635,8 @@
         country: state.answers.addr_country || cfg.defaultCountry || "United States",
         source: cfg.source,
         campaign: cfg.campaign,
+        campaignLabel: cfg.campaign,
+        campaignId: cfg.campaignId,
         jobTypeId: cfg.jobTypeId,
         service: serviceName,
         priceRange: `$${money(pr.low)}-$${money(pr.high)}`,
@@ -629,8 +710,7 @@
     
       mount.innerHTML = "";
     
-      const { i, total } = getStepIndex();
-      const pct = total ? Math.round((i / total) * 100) : 0;
+      const progress = calculateProgress(qmap, state);
     
       const pr = sumPricing(cfg, qmap, state);
       const preview = computePreviewLabel(pr);
@@ -638,10 +718,7 @@
       const content = mk("div", { id: "step-content" });
     
       const header = mk("div", { class: "stepHeader" }, [
-        mk("div", { class: "progressWrap" }, [
-          mk("div", { class: "progressMeta" }, [`Step ${i} of ${total}`]),
-          mk("div", { class: "progressBar" }, [mk("div", { class: "progressFill", style: `width:${pct}%` })])
-        ]),
+        renderProgress(progress),
         mk("h2", {}, [q.title || ""]),
         q.subtitle ? mk("div", { class: "stepSub" }, [q.subtitle]) : null,
         // question tooltip rendered as a visible box (optional)
