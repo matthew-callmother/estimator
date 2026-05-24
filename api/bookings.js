@@ -13,6 +13,15 @@ const ENVIRONMENTS = {
   }
 };
 
+const SERVICETITAN_DEFAULTS = {
+  source: "Website Estimator",
+  bookingProvider: "85648468",
+  businessUnitId: 1357,
+  campaign: "Website Water Heater Estimator",
+  customerType: "Residential",
+  phoneContactType: "MobilePhone"
+};
+
 module.exports = async function handler(req, res) {
   setCorsHeaders(res);
 
@@ -103,11 +112,11 @@ function validateBooking(form) {
 }
 
 function buildServiceTitanBooking(form) {
-  const businessUnitId = numberOrUndefined(process.env.SERVICETITAN_BUSINESS_UNIT_ID || 1357);
+  const businessUnitId = numberOrUndefined(process.env.SERVICETITAN_BUSINESS_UNIT_ID || SERVICETITAN_DEFAULTS.businessUnitId);
   const jobTypeId = numberOrUndefined(form.jobTypeId || process.env.SERVICETITAN_JOB_TYPE_ID);
   const campaignId = numberOrUndefined(form.campaignId || process.env.SERVICETITAN_CAMPAIGN_ID);
-  const campaignLabel = cleanString(form.campaignLabel || form.campaign || process.env.SERVICETITAN_CAMPAIGN);
-  const source = cleanString(form.source || process.env.SERVICETITAN_SOURCE || "Website Estimator");
+  const campaignLabel = cleanString(form.campaignLabel || form.campaign || process.env.SERVICETITAN_CAMPAIGN || SERVICETITAN_DEFAULTS.campaign);
+  const source = cleanString(form.source || process.env.SERVICETITAN_SOURCE || SERVICETITAN_DEFAULTS.source);
   const submittedAt = new Date().toISOString();
   const summary = buildSummary({ ...form, campaignLabel }, submittedAt);
 
@@ -123,7 +132,7 @@ function buildServiceTitanBooking(form) {
       country: formatCountry(cleanString(form.country) || "United States")
     },
     contacts: buildContacts(form),
-    customerType: process.env.SERVICETITAN_CUSTOMER_TYPE || "Residential",
+    customerType: process.env.SERVICETITAN_CUSTOMER_TYPE || SERVICETITAN_DEFAULTS.customerType,
     start: submittedAt,
     summary,
     campaignId,
@@ -139,7 +148,7 @@ function buildServiceTitanBooking(form) {
 function buildContacts(form) {
   return [
     cleanString(form.phone) ? {
-      type: process.env.SERVICETITAN_PHONE_CONTACT_TYPE || "Phone",
+      type: process.env.SERVICETITAN_PHONE_CONTACT_TYPE || SERVICETITAN_DEFAULTS.phoneContactType,
       value: cleanString(form.phone),
       memo: "Estimator phone"
     } : null,
@@ -243,7 +252,7 @@ async function createServiceTitanBooking(booking) {
 
 function getBookingsEndpoint(env) {
   const tenantId = cleanString(requireEnv("SERVICETITAN_TENANT_ID"));
-  const bookingProvider = cleanString(requireEnv("SERVICETITAN_BOOKING_PROVIDER"));
+  const bookingProvider = cleanString(process.env.SERVICETITAN_BOOKING_PROVIDER || SERVICETITAN_DEFAULTS.bookingProvider);
   return {
     template: "/crm/v2/tenant/{tenant}/booking-provider/{booking_provider}/bookings",
     url: `${env.apiBaseUrl}/crm/v2/tenant/${encodeURIComponent(tenantId)}/booking-provider/${encodeURIComponent(bookingProvider)}/bookings`
@@ -340,7 +349,7 @@ function requireEnv(name) {
         SERVICETITAN_CLIENT_SECRET: Boolean(process.env.SERVICETITAN_CLIENT_SECRET),
         SERVICETITAN_APP_KEY: Boolean(process.env.SERVICETITAN_APP_KEY),
         SERVICETITAN_TENANT_ID: Boolean(process.env.SERVICETITAN_TENANT_ID),
-        SERVICETITAN_BOOKING_PROVIDER: Boolean(process.env.SERVICETITAN_BOOKING_PROVIDER)
+        SERVICETITAN_BOOKING_PROVIDER: Boolean(process.env.SERVICETITAN_BOOKING_PROVIDER || SERVICETITAN_DEFAULTS.bookingProvider)
       }
     };
     throw error;
