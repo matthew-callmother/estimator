@@ -198,25 +198,8 @@
     return uniqueValues([...optionNextIds, q.next]);
   }
 
-  function getResolvedNextQuestionIds(q, answers) {
-    if (!q) return [];
-
-    if (q.type === "single_select") {
-      const opt = getOption(q, answers?.[q.id]);
-      if (opt?.next) return [opt.next];
-    }
-
-    return q.next ? [q.next] : [];
-  }
-
   function isProgressCountedQuestion(q) {
     return !!q && PROGRESS_COUNTED_TYPES.has(q.type);
-  }
-
-  function isCurrentProgressStepComplete(q, answers) {
-    if (!isProgressCountedQuestion(q)) return false;
-    if (q.type === "summary") return false;
-    return isQuestionComplete(q, answers);
   }
 
   function longestCountedPathFrom(qmap, id, seen = new Set()) {
@@ -242,19 +225,11 @@
       return count + (isProgressCountedQuestion(getQuestion(qmap, id)) ? 1 : 0);
     }, 0);
 
-    const currentComplete = isCurrentProgressStepComplete(q, state.answers);
-    const currentCompleted = currentComplete ? 1 : 0;
-    const completed = completedHistory + currentCompleted;
-
-    const remaining = currentComplete
-      ? getResolvedNextQuestionIds(q, state.answers).reduce(
-        (longest, nextId) => Math.max(longest, longestCountedPathFrom(qmap, nextId)),
-        0
-      )
-      : longestCountedPathFrom(qmap, state.currentId);
+    const completed = completedHistory;
+    const remaining = longestCountedPathFrom(qmap, state.currentId);
 
     const total = Math.max(completed + remaining, completed, 1);
-    const currentStep = isProgressCountedQuestion(q) && !currentComplete
+    const currentStep = isProgressCountedQuestion(q)
       ? Math.min(completed + 1, total)
       : Math.min(Math.max(completed, 1), total);
     const percent = Math.max(0, Math.min(100, Math.round((completed / total) * 100)));
@@ -510,14 +485,17 @@
     }
 
 
-    function renderLoadingStep(q) {
+    function renderLoadingStep(q, submittedId) {
       mount.innerHTML = "";
 
       const duration = Number(q.duration_ms || 1600);
       const start = Date.now();
       const fillId = `loadfill_${q.id}`;
 
-      const progress = calculateProgress(qmap, state);
+      const progressState = submittedId
+        ? { ...state, currentId: q.id, history: [...state.history, submittedId] }
+        : state;
+      const progress = calculateProgress(qmap, progressState);
 
       const card = mk("div", { class: "card" }, [
         mk("div", { class: "stepHeader" }, [
@@ -573,7 +551,7 @@
 
       const nextQ = getQuestion(qmap, nextId);
       if (nextQ?.type === "loading_lookup") {
-        const tracker = renderLoadingStep(nextQ);
+        const tracker = renderLoadingStep(nextQ, state.currentId);
 
         try {
           await runPermitLookup(cfg, state, nextQ);
