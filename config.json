@@ -1,8 +1,20 @@
 {
   "meta": {
+    "estimatorId": "water-heater",
+    "serviceName": "Water heater estimate request",
     "version": "routing-v1",
     "currency": "USD",
     "lock_hours": 72
+  },
+  "estimatorId": "water-heater",
+  "serviceName": "Water heater estimate request",
+  "defaultCountry": "United States",
+  "campaign": "Website Water Heater Estimator",
+  "display": {
+    "introTitle": "Should I Buy a Tankless?",
+    "introSubtitle": "Is a tankless water heater right for your home?",
+    "introImageUrl": "https://cdn.prod.website-files.com/678144dfb4c536263e714199/699886303d4e775bbb86fe2a_Image%20Container.avif",
+    "defaultOptionImageUrl": "https://cdn.prod.website-files.com/678144dfb4c536263e714199/699886531f16edb42e3a709d_Option%20Image%20(1).webp"
   },
   "pricing": {
     "exact_requires": [
@@ -107,7 +119,7 @@
       "options": [
         { "value": "asap", "label": "ASAP (no hot water)", "pricing": { "low": 150, "high": 250, "exact": 250 }, "next": "address_gate" },
         { "value": "week", "label": "This week", "pricing": { "low": 0, "high": 0, "exact": 0 }, "next": "address_gate" },
-        { "value": "month", "label": "1–4 weeks", "pricing": { "low": 0, "high": 0, "exact": 0 }, "next": "address_gate" }
+        { "value": "month", "label": "1-4 weeks", "pricing": { "low": 0, "high": 0, "exact": 0 }, "next": "address_gate" }
       ]
     },
     {
@@ -117,6 +129,7 @@
       "subtitle": "Enter your address so we can verify permit requirements.",
       "fields": [
         { "id": "addr_street", "label": "Street", "input_type": "text", "required": true, "placeholder": "123 Main St", "autocomplete": "street-address" },
+        { "id": "addr_unit", "label": "Unit", "input_type": "text", "required": false, "placeholder": "Apt, suite, etc.", "autocomplete": "address-line2" },
         { "id": "addr_city", "label": "City", "input_type": "text", "required": true, "placeholder": "Frisco", "autocomplete": "address-level2" },
         { "id": "addr_state", "label": "State", "input_type": "text", "required": true, "placeholder": "TX", "autocomplete": "address-level1", "pattern": "^[A-Za-z]{2}$", "pattern_msg": "Use a 2-letter state code (e.g., TX)" },
         { "id": "addr_zip", "label": "Zip", "input_type": "text", "required": true, "placeholder": "75034", "autocomplete": "postal-code", "pattern": "^\\d{5}(-\\d{4})?$", "pattern_msg": "Use a 5-digit ZIP" }
@@ -127,7 +140,7 @@
     {
       "id": "permit_check",
       "type": "loading_lookup",
-      "title": "Checking permit + code requirements…",
+      "title": "Checking permit + code requirements...",
       "subtitle": "Verifying municipality permit fees and requirements for your address.",
       "duration_ms": 2800,
       "lookup": {
@@ -165,7 +178,7 @@
       "id": "submit",
       "type": "submit",
       "title": "Submit",
-      "subtitle": "We’ll hold this estimate for 72 hours.",
+      "subtitle": "We'll hold this estimate for 72 hours.",
       "submit_label": "Submit"
     }
   ],
