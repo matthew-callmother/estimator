@@ -5,6 +5,7 @@
   --quiz-card: #ffffff;
   --quiz-text: #050540;
   --quiz-muted: #676a86;
+  --quiz-placeholder: #9a9db4;
   --quiz-surface: #f7f8fb;
   --quiz-surface-strong: #eef0f5;
   --quiz-border: #d9dbe7;
@@ -401,6 +402,13 @@
   font-size: 15px;
   outline: none;
   padding: 12px 14px;
+}
+
+#wh-estimator .quiz_text-input-field::placeholder,
+#wh-estimator .field input::placeholder,
+#wh-estimator .field textarea::placeholder {
+  color: var(--quiz-placeholder);
+  opacity: 1;
 }
 
 #wh-estimator .quiz_text-input-field:focus,
