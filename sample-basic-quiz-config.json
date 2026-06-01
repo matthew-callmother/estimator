@@ -177,24 +177,10 @@
           "pattern_msg": "Use a 2-letter state code"
         }
       ],
-      "next_label": "Review",
-      "next": "result"
-    },
-    {
-      "id": "result",
-      "type": "summary",
-      "title": "Your quiz results",
-      "subtitle": "Review your answers before finishing.",
-      "next_label": "Finish",
-      "next": "submit"
-    },
-    {
-      "id": "submit",
-      "type": "submit",
-      "title": "You're all set",
-      "subtitle": "Thanks for taking the quiz.",
-      "submit_label": "Finish",
-      "pending_label": "Finishing..."
+      "next_label": "Submit Quiz",
+      "submit_label": "Submit Quiz",
+      "pending_label": "Submitting...",
+      "submit_on_next": true
     }
   ],
   "result_copy": {

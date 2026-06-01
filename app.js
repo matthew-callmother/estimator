@@ -246,7 +246,14 @@
     const allowedZipPrefixes = (serviceArea.allowedZipPrefixes || []).map((prefix) => String(prefix || "").trim()).filter(Boolean);
 
     if (!allowedZips.length && !allowedZipPrefixes.length) {
-      return { checked: false, eligible: true };
+      return {
+        checked: true,
+        eligible: false,
+        zip: normalizeZip(answers.addr_zip),
+        reason: "service_area_rules_missing",
+        title: serviceArea.outOfAreaTitle || "We could not verify your service area",
+        message: serviceArea.outOfAreaMessage || "Please try again or contact us directly."
+      };
     }
 
     const zip = normalizeZip(answers.addr_zip);
@@ -270,7 +277,10 @@
       SERVICE_AREA_CACHE = await fetchJSON(getServiceAreaUrl());
     } catch (e) {
       console.warn("Service area failed to load:", e);
-      SERVICE_AREA_CACHE = {};
+      SERVICE_AREA_CACHE = {
+        outOfAreaTitle: "We could not verify your service area",
+        outOfAreaMessage: "Please try again or contact us directly."
+      };
     }
     return SERVICE_AREA_CACHE;
   }
@@ -699,6 +709,10 @@
 
       if (!isQuestionComplete(current, state.answers)) return;
 
+      if (current.submit_on_next === true) {
+        return await submitPayload();
+      }
+
       if (current.id === cfg.address_gate_id) {
         state.meta.address_submitted_sig = computeAddressSig(cfg, state.answers);
       }
@@ -897,7 +911,8 @@
       const content = mk("div", { id: "step-content", class: "quiz_step-content" });
     
       const canGoBack = state.history.length > 0;
-      const nextLabel = q.next_label || (q.type === "submit" ? (q.submit_label || "Submit") : "Next");
+      const isSubmitAction = q.type === "submit" || q.submit_on_next === true;
+      const nextLabel = q.next_label || (isSubmitAction ? (q.submit_label || "Submit") : "Next");
     
       const submitMessage = mk("div", { class: "note submitMessage", style: "display:none" }, [""]);
       const backBtn = canGoBack
@@ -910,14 +925,14 @@
         onClick: async () => {
           nextBtn.disabled = true;
           const originalLabel = nextBtn.textContent;
-          if (q.type === "submit") {
+          if (isSubmitAction) {
             nextBtn.textContent = "Submitting...";
             showSubmitMessage(submitMessage, "pending", q.pending_label || "Submitting...");
           }
 
           try {
             const result = await handleNext(q);
-            if (q.type === "submit") {
+            if (isSubmitAction) {
               const successMessage = result?.outOfArea
                 ? (result.message || "Unfortunately, we are not in your service area yet.")
                 : result?.dryRun
@@ -935,7 +950,7 @@
             }
           } catch (error) {
             console.error(error);
-            if (q.type === "submit") {
+            if (isSubmitAction) {
               showSubmitMessage(submitMessage, "error", error?.message || "We couldn't submit this request. Please try again.");
             } else {
               alert(error?.message || "We couldn't submit this request. Please try again.");
