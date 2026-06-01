@@ -161,21 +161,86 @@ function buildContacts(form) {
 }
 
 function buildSummary(form, submittedAt) {
-  const lines = [
-    form.serviceName || form.service || "Website booking request",
-    form.estimatorId ? `Estimator: ${form.estimatorId}` : null,
-    form.priceRange ? `Estimated price range: ${form.priceRange}` : null,
-    form.exactTotal !== undefined ? `Estimator exact total: $${form.exactTotal}` : null,
-    form.campaignLabel ? `Campaign: ${form.campaignLabel}` : null,
-    form.permit ? `Permit: ${JSON.stringify(form.permit)}` : null,
-    form.pageUrl ? `Page URL: ${form.pageUrl}` : null,
-    form.submittedAt ? `Browser submitted at: ${form.submittedAt}` : null,
-    `Server submitted at: ${submittedAt}`,
-    form.notes,
-    form.answers ? `Questionnaire answers: ${JSON.stringify(form.answers)}` : null
+  const sections = [
+    summarySection("Quiz Submitted", [
+      form.quizName || form.serviceName || form.service || "Website booking request",
+      form.quizId || form.estimatorId ? `Quiz ID: ${form.quizId || form.estimatorId}` : null,
+      form.campaignLabel ? `Campaign: ${form.campaignLabel}` : null
+    ]),
+    summarySection("Customer", [
+      form.name ? `Name: ${form.name}` : null,
+      form.phone ? `Phone: ${form.phone}` : null,
+      form.email ? `Email: ${form.email}` : null
+    ]),
+    summarySection("Service Address", [
+      form.street ? `Street: ${form.street}` : null,
+      form.unit ? `Unit: ${form.unit}` : null,
+      form.city || form.state || form.zip ? `City/State/ZIP: ${[form.city, form.state, form.zip].filter(Boolean).join(", ")}` : null,
+      form.country ? `Country: ${form.country}` : null
+    ]),
+    summarySection("Quiz Answers", formatReadableAnswers(form)),
+    summarySection("Pricing", [
+      form.priceRange ? `Estimated price range: ${form.priceRange}` : null,
+      form.exactTotal !== undefined ? `Exact total: $${form.exactTotal}` : null
+    ]),
+    summarySection("Permit", formatPermit(form.permit)),
+    summarySection("Recommendation", formatRecommendation(form.recommendation)),
+    summarySection("Page / Tracking", [
+      form.pageUrl ? `Page URL: ${form.pageUrl}` : null,
+      form.submittedAt ? `Browser submitted at: ${form.submittedAt}` : null,
+      `Server submitted at: ${submittedAt}`
+    ]),
+    form.notes ? summarySection("Notes", [form.notes]) : null
   ];
 
-  return lines.filter(Boolean).join("\n");
+  return sections.filter(Boolean).join("\n\n");
+}
+
+function summarySection(title, lines) {
+  const cleanLines = (lines || []).filter(Boolean);
+  if (!cleanLines.length) return null;
+  return [`${title}:`, ...cleanLines].join("\n");
+}
+
+function formatReadableAnswers(form) {
+  if (Array.isArray(form.readableAnswers) && form.readableAnswers.length) {
+    return form.readableAnswers.map((item) => {
+      const question = cleanString(item.question) || cleanString(item.questionId) || "Question";
+      const answer = cleanString(item.answer) || cleanString(item.value) || "";
+      return answer ? `${question}: ${answer}` : question;
+    });
+  }
+
+  if (!form.answers || typeof form.answers !== "object") return [];
+  return Object.entries(form.answers).map(([key, value]) => `${key}: ${formatSummaryValue(value)}`);
+}
+
+function formatPermit(permit) {
+  if (!permit || typeof permit !== "object") return [];
+
+  return [
+    permit.done !== undefined ? `Lookup completed: ${permit.done ? "Yes" : "No"}` : null,
+    permit.city ? `Municipality: ${permit.city}` : null,
+    permit.found !== undefined ? `Municipality found: ${permit.found ? "Yes" : "No"}` : null,
+    permit.fee !== undefined && permit.fee !== null ? `Permit fee: $${permit.fee}` : null,
+    permit.expansionTankRequired !== undefined ? `Expansion tank required: ${permit.expansionTankRequired ? "Yes" : "No"}` : null
+  ].filter(Boolean);
+}
+
+function formatRecommendation(recommendation) {
+  if (!recommendation) return [];
+  if (typeof recommendation === "string") return [recommendation];
+  if (Array.isArray(recommendation)) return recommendation.map(formatSummaryValue);
+  if (typeof recommendation === "object") {
+    return Object.entries(recommendation).map(([key, value]) => `${key}: ${formatSummaryValue(value)}`);
+  }
+  return [formatSummaryValue(recommendation)];
+}
+
+function formatSummaryValue(value) {
+  if (value === undefined || value === null) return "";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
 }
 
 function cleanString(value) {
@@ -349,7 +414,7 @@ function requireEnv(name) {
         SERVICETITAN_CLIENT_SECRET: Boolean(process.env.SERVICETITAN_CLIENT_SECRET),
         SERVICETITAN_APP_KEY: Boolean(process.env.SERVICETITAN_APP_KEY),
         SERVICETITAN_TENANT_ID: Boolean(process.env.SERVICETITAN_TENANT_ID),
-        SERVICETITAN_BOOKING_PROVIDER: Boolean(process.env.SERVICETITAN_BOOKING_PROVIDER || SERVICETITAN_DEFAULTS.bookingProvider)
+        SERVICETITAN_BOOKING_PROVIDER: Boolean(process.env.SERVICETITAN_BOOKING_PROVIDER)
       }
     };
     throw error;

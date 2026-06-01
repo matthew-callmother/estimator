@@ -9,6 +9,23 @@
   const MOUNT_ID = "wh-estimator";
   const STORAGE_KEY = "wh_estimator_routing_state";
   const PROGRESS_COUNTED_TYPES = new Set(["single_select", "form", "summary"]);
+  const CANONICAL_LEAD_FIELD_IDS = new Set([
+    "contact_name",
+    "contact_phone",
+    "contact_email",
+    "addr_street",
+    "addr_unit",
+    "addr_city",
+    "addr_state",
+    "addr_zip",
+    "addr_country"
+  ]);
+  const INTERNAL_ANSWER_IDS = new Set([
+    "permit_fee_usd",
+    "expansion_tank_required",
+    "municipality_city",
+    "municipality_found"
+  ]);
 
   /* ---------------- Helpers ---------------- */
   const qs = (sel, root = document) => root.querySelector(sel);
@@ -188,6 +205,95 @@
 
   function getOption(q, value) {
     return (q?.options || []).find((o) => String(o.value) === String(value)) || null;
+  }
+
+  function getFeatures(cfg) {
+    const configured = cfg?.features || {};
+    const questions = cfg?.questions || [];
+    const hasPermitStep = questions.some((q) => q.type === "loading_lookup");
+    const hasSubmitStep = questions.some((q) => q.type === "submit");
+    const serviceArea = cfg?.serviceArea || {};
+    const hasServiceAreaRules = Boolean((serviceArea.allowedZips || []).length || (serviceArea.allowedZipPrefixes || []).length);
+
+    return {
+      pricing: configured.pricing === undefined ? Boolean(cfg?.pricing) : Boolean(configured.pricing),
+      permitLookup: configured.permitLookup === undefined ? hasPermitStep : Boolean(configured.permitLookup),
+      serviceAreaFilter: configured.serviceAreaFilter === undefined ? hasServiceAreaRules : Boolean(configured.serviceAreaFilter),
+      serviceTitanBooking: configured.serviceTitanBooking === undefined ? hasSubmitStep : Boolean(configured.serviceTitanBooking),
+      recommendations: Boolean(configured.recommendations)
+    };
+  }
+
+  function normalizeZip(value) {
+    const match = String(value || "").match(/\d{5}/);
+    return match ? match[0] : "";
+  }
+
+  function getServiceAreaStatus(cfg, answers, features) {
+    if (!features.serviceAreaFilter) return { checked: false, eligible: true };
+
+    const serviceArea = cfg.serviceArea || {};
+    const allowedZips = (serviceArea.allowedZips || []).map(normalizeZip).filter(Boolean);
+    const allowedZipPrefixes = (serviceArea.allowedZipPrefixes || []).map((prefix) => String(prefix || "").trim()).filter(Boolean);
+
+    if (!allowedZips.length && !allowedZipPrefixes.length) {
+      return { checked: false, eligible: true };
+    }
+
+    const zip = normalizeZip(answers.addr_zip);
+    if (!zip) return { checked: true, eligible: false, zip };
+
+    const eligible = allowedZips.includes(zip) || allowedZipPrefixes.some((prefix) => zip.startsWith(prefix));
+    return {
+      checked: true,
+      eligible,
+      zip,
+      title: serviceArea.outOfAreaTitle || "Unfortunately, we are not in your service area yet",
+      message: serviceArea.outOfAreaMessage || "We are expanding soon. Please check back later."
+    };
+  }
+
+  function buildReadableAnswers(cfg, qmap, answers) {
+    const readable = [];
+
+    for (const q of (cfg.questions || [])) {
+      if (q.type === "single_select") {
+        const value = answers[q.id];
+        if (isEmpty(value)) continue;
+        const opt = getOption(q, value);
+        readable.push({
+          questionId: q.id,
+          question: q.title || q.id,
+          value,
+          answer: opt?.label || value
+        });
+      }
+
+      if (q.type === "form") {
+        for (const field of (q.fields || [])) {
+          if (CANONICAL_LEAD_FIELD_IDS.has(field.id)) continue;
+          if (INTERNAL_ANSWER_IDS.has(field.id)) continue;
+          const value = answers[field.id];
+          if (isEmpty(value)) continue;
+          readable.push({
+            questionId: field.id,
+            question: field.label || field.id,
+            value,
+            answer: value
+          });
+        }
+      }
+    }
+
+    for (const [id, value] of Object.entries(answers || {})) {
+      if (isEmpty(value) || CANONICAL_LEAD_FIELD_IDS.has(id) || INTERNAL_ANSWER_IDS.has(id)) continue;
+      const known = readable.some((item) => item.questionId === id);
+      if (!known && !getQuestion(qmap, id)) {
+        readable.push({ questionId: id, question: id, value, answer: value });
+      }
+    }
+
+    return readable;
   }
 
   function uniqueValues(values) {
@@ -373,6 +479,7 @@
       return;
     }
 
+    const features = getFeatures(cfg);
     const state = loadEstimatorState(cfg);
 
     if (!state.currentId) state.currentId = cfg.start || (cfg.questions?.[0]?.id ?? null);
@@ -585,6 +692,17 @@
       if (!nextId) return;
 
       const nextQ = getQuestion(qmap, nextId);
+      if (nextQ?.type === "loading_lookup" && !features.permitLookup) {
+        const afterId = nextQ.next || null;
+        if (afterId) {
+          state.history.push(state.currentId);
+          state.currentId = afterId;
+        }
+        saveState(state, cfg);
+        scheduleRender();
+        return;
+      }
+
       if (nextQ?.type === "loading_lookup") {
         const tracker = renderLoadingStep(nextQ, state.currentId);
 
@@ -630,12 +748,13 @@
       scheduleRender();
     }
 
-    function buildBookingPayload(pr) {
+    function buildBookingPayload(pr, serviceAreaStatus) {
       const estimatorId = cfg.estimatorId || cfg.meta?.estimatorId || "water-heater";
       const serviceName = cfg.serviceName || cfg.meta?.serviceName || "Water heater estimate request";
-
-      return {
+      const payload = {
         estimatorId,
+        quizId: estimatorId,
+        quizName: cfg.quizName || cfg.title || serviceName,
         serviceName,
         name: state.answers.contact_name,
         phone: state.answers.contact_phone,
@@ -652,25 +771,31 @@
         campaignId: cfg.campaignId,
         jobTypeId: cfg.jobTypeId,
         service: serviceName,
-        priceRange: `$${money(pr.low)}-$${money(pr.high)}`,
-        exactTotal: pr.exact,
-        pricing: { low: pr.low, high: pr.high, exact: pr.exact },
         questionId: state.currentId,
         answers: state.answers,
-        permit: {
+        readableAnswers: buildReadableAnswers(cfg, qmap, state.answers),
+        serviceArea: serviceAreaStatus || getServiceAreaStatus(cfg, state.answers, features),
+        pageUrl: location.href,
+        submittedAt: new Date().toISOString()
+      };
+
+      if (features.pricing && pr) {
+        payload.priceRange = `$${money(pr.low)}-$${money(pr.high)}`;
+        payload.exactTotal = pr.exact;
+        payload.pricing = { low: pr.low, high: pr.high, exact: pr.exact, items: pr.items };
+      }
+
+      if (features.permitLookup) {
+        payload.permit = {
           done: state.meta.permit_done,
           city: state.answers.municipality_city,
           found: state.answers.municipality_found,
           fee: state.answers.permit_fee_usd,
           expansionTankRequired: state.answers.expansion_tank_required
-        },
-        pageUrl: location.href,
-        submittedAt: new Date().toISOString(),
-        notes: [
-          state.meta.permit_done ? "Permit lookup completed." : "Permit lookup not completed.",
-          `Estimator exact total: $${money(pr.exact)}`
-        ].join(" ")
-      };
+        };
+      }
+
+      return payload;
     }
 
     function showSubmitMessage(el, type, text) {
@@ -681,8 +806,26 @@
     }
 
     async function submitPayload() {
-      const pr = sumPricing(cfg, qmap, state);
-      const payload = buildBookingPayload(pr);
+      const serviceAreaStatus = getServiceAreaStatus(cfg, state.answers, features);
+      const pr = features.pricing ? sumPricing(cfg, qmap, state) : null;
+      const payload = buildBookingPayload(pr, serviceAreaStatus);
+
+      if (serviceAreaStatus.checked && !serviceAreaStatus.eligible) {
+        return {
+          ok: true,
+          skippedBackend: true,
+          outOfArea: true,
+          message: `${serviceAreaStatus.title}. ${serviceAreaStatus.message}`
+        };
+      }
+
+      if (!features.serviceTitanBooking) {
+        return {
+          ok: true,
+          skippedBackend: true,
+          message: "Submission captured locally. ServiceTitan booking is disabled for this quiz."
+        };
+      }
 
       const response = await fetch(getBookingEndpoint(), {
         method: "POST",
@@ -725,8 +868,8 @@
     
       const progress = calculateProgress(qmap, state);
     
-      const pr = sumPricing(cfg, qmap, state);
-      const preview = computePreviewLabel(pr);
+      const pr = features.pricing ? sumPricing(cfg, qmap, state) : null;
+      const preview = features.pricing ? computePreviewLabel(pr) : null;
     
       const content = mk("div", { id: "step-content", class: "quiz_step-content" });
     
@@ -746,18 +889,23 @@
           const originalLabel = nextBtn.textContent;
           if (q.type === "submit") {
             nextBtn.textContent = "Submitting...";
-            showSubmitMessage(submitMessage, "pending", "Sending your estimate...");
+            showSubmitMessage(submitMessage, "pending", q.pending_label || "Submitting...");
           }
 
           try {
             const result = await handleNext(q);
             if (q.type === "submit") {
+              const successMessage = result?.outOfArea
+                ? (result.message || "Unfortunately, we are not in your service area yet.")
+                : result?.dryRun
+                  ? "Test submission received. Dry run is on, so nothing was sent to ServiceTitan."
+                  : result?.skippedBackend
+                    ? (result.message || "Submission complete.")
+                    : "Submitted. We'll reach out shortly.";
               showSubmitMessage(
                 submitMessage,
                 "success",
-                result?.dryRun
-                  ? "Test submission received. Dry run is on, so nothing was sent to ServiceTitan."
-                  : "Submitted. We'll reach out shortly."
+                successMessage
               );
               nextBtn.textContent = "Submitted";
               return;
@@ -765,9 +913,9 @@
           } catch (error) {
             console.error(error);
             if (q.type === "submit") {
-              showSubmitMessage(submitMessage, "error", error?.message || "We couldn't submit this estimate. Please try again.");
+              showSubmitMessage(submitMessage, "error", error?.message || "We couldn't submit this request. Please try again.");
             } else {
-              alert(error?.message || "We couldn't submit this estimate. Please try again.");
+              alert(error?.message || "We couldn't submit this request. Please try again.");
             }
             nextBtn.disabled = !isQuestionComplete(q, state.answers);
             nextBtn.textContent = originalLabel;
@@ -778,19 +926,20 @@
       const nav = mk("div", { class: "quiz_nav-actions" }, [backBtn, nextBtn]);
     
       // preview nodes (so we don't querySelector before they exist)
-      const previewLabelEl = mk("span", {}, [preview.label]);
-      const previewPriceEl = mk("div", { class: "quiz_price-preview-value previewPrice" }, [preview.value]);
-      const previewSubEl = mk("div", { class: "quiz_price-preview-sub previewSub" }, [preview.sub]);
-      const previewTop = mk("div", { class: "quiz_price-preview-top previewTop" }, [
+      const previewLabelEl = features.pricing ? mk("span", {}, [preview.label]) : null;
+      const previewPriceEl = features.pricing ? mk("div", { class: "quiz_price-preview-value previewPrice" }, [preview.value]) : null;
+      const previewSubEl = features.pricing ? mk("div", { class: "quiz_price-preview-sub previewSub" }, [preview.sub]) : null;
+      const previewTop = features.pricing ? mk("div", { class: "quiz_price-preview-top previewTop" }, [
         previewLabelEl,
         preview.disclaimer ? tooltip(preview.disclaimer) : null
-      ]);
+      ]) : null;
     
-      const previewEl = mk("div", { class: "quiz_price-preview preview" }, [previewTop, previewPriceEl, previewSubEl]);
+      const previewEl = features.pricing ? mk("div", { class: "quiz_price-preview preview" }, [previewTop, previewPriceEl, previewSubEl]) : null;
     
       const ui = {
         updateNextDisabled: () => { nextBtn.disabled = !isQuestionComplete(q, state.answers); },
         updatePreview: () => {
+          if (!features.pricing) return;
           const pr2 = sumPricing(cfg, qmap, state);
           const p2 = computePreviewLabel(pr2);
           previewLabelEl.textContent = p2.label;
@@ -803,7 +952,7 @@
       if (q.type === "single_select") renderSingleSelect(q, content);
       else if (q.type === "form") renderForm(q, content, ui);
       else if (q.type === "summary") content.appendChild(mk("div", { class: "note" }, ["Review your answers, then continue."]));
-      else if (q.type === "submit") content.appendChild(mk("div", { class: "note" }, [q.note || "Submit to lock in this estimate."]));
+      else if (q.type === "submit") content.appendChild(mk("div", { class: "note" }, [q.note || "Submit when you are ready."]));
       else if (q.type === "content") content.appendChild(mk("div", { class: "contentBlock", html: q.html || "" }));
 
       const questionHeader = mk("div", { class: "quiz-question-content" }, [

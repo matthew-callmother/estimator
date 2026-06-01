@@ -10,6 +10,19 @@
   "serviceName": "Water heater estimate request",
   "defaultCountry": "United States",
   "campaign": "Website Water Heater Estimator",
+  "features": {
+    "pricing": true,
+    "permitLookup": true,
+    "serviceAreaFilter": false,
+    "serviceTitanBooking": true,
+    "recommendations": false
+  },
+  "serviceArea": {
+    "allowedZips": [],
+    "allowedZipPrefixes": [],
+    "outOfAreaTitle": "Unfortunately, we are not in your service area yet",
+    "outOfAreaMessage": "We are expanding soon. Please check back later."
+  },
   "pricing": {
     "exact_requires": [
       "addr_street",
