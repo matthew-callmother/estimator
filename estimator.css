@@ -14,6 +14,7 @@
   --quiz-accent-soft: #f58bad;
   --quiz-focus: rgba(239, 43, 107, 0.18);
   --quiz-radius: 8px;
+  --quiz-shadow: 0 18px 48px rgba(5, 5, 64, 0.2);
   --quiz-font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
 
   position: relative;
@@ -53,14 +54,14 @@
   overflow: auto;
   border-radius: var(--quiz-radius);
   background: var(--quiz-card);
-  box-shadow: 0 20px 54px rgba(5, 5, 64, 0.22);
+  box-shadow: var(--quiz-shadow);
 }
 
 #wh-estimator .quiz_main-content,
 #wh-estimator .card {
   display: grid;
-  gap: 16px;
-  padding: 26px;
+  gap: 18px;
+  padding: 28px;
 }
 
 #wh-estimator .stepHeader h2,
@@ -134,7 +135,7 @@
 #wh-estimator .quiz-question-content,
 #wh-estimator .card > #step-content {
   display: grid;
-  gap: 16px;
+  gap: 14px;
 }
 
 #wh-estimator .quiz-question-content {
@@ -185,10 +186,10 @@
 #wh-estimator .choicesGrid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 12px;
-  max-height: 256px;
-  overflow: auto;
-  padding-right: 12px;
+  gap: 10px;
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
   scrollbar-color: var(--quiz-border-strong) var(--quiz-surface-strong);
   scrollbar-width: thin;
 }
@@ -216,6 +217,7 @@
 
 #wh-estimator .quiz-option,
 #wh-estimator .choice {
+  position: relative;
   min-width: 0;
   border: 1px solid var(--quiz-border);
   border-radius: 8px;
@@ -227,14 +229,14 @@
 #wh-estimator .quiz-option:hover,
 #wh-estimator .choice:hover {
   border-color: var(--quiz-border-strong);
-  background: #fbfbfd;
+  background: var(--quiz-surface);
 }
 
 #wh-estimator .quiz-option.is-input-active,
 #wh-estimator .choice.active {
   border-color: var(--quiz-accent);
-  background: #fff7fa;
-  box-shadow: 0 0 0 3px var(--quiz-focus);
+  background: #fff8fb;
+  box-shadow: inset 0 0 0 1px var(--quiz-accent);
 }
 
 #wh-estimator .quiz-option:focus-visible,
@@ -250,22 +252,33 @@
 #wh-estimator .quiz-radio,
 #wh-estimator .quiz-checkbox,
 #wh-estimator .choiceMain {
-  display: flex;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 14px;
-  min-height: 74px;
+  gap: 12px;
+  min-height: 60px;
   width: 100%;
-  padding: 14px 16px;
+  padding: 13px 14px;
   cursor: pointer;
+}
+
+#wh-estimator .quiz_native-radio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+  padding: 0;
 }
 
 #wh-estimator .quiz_radio-button,
 #wh-estimator .quiz_checkbox-button {
-  order: 1;
-  flex: 0 0 auto;
-  width: 15px;
-  height: 15px;
-  border: 1px solid var(--quiz-border-strong);
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--quiz-border-strong);
   border-radius: 999px;
   background: #ffffff;
   position: relative;
@@ -280,7 +293,7 @@
 #wh-estimator .quiz-option.is-input-active .quiz_checkbox-button {
   border-color: var(--quiz-accent);
   background: #ffffff;
-  box-shadow: none;
+  box-shadow: inset 0 0 0 4px #ffffff;
 }
 
 #wh-estimator .quiz-option.is-input-active .quiz_radio-button::after,
@@ -292,21 +305,23 @@
   background: var(--quiz-accent);
 }
 
+#wh-estimator .quiz_native-radio:focus-visible + .quiz_radio-button {
+  box-shadow: 0 0 0 4px var(--quiz-focus);
+}
+
 #wh-estimator .quiz_choose-option-content,
 #wh-estimator .choiceTop {
-  order: 2;
   display: grid;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
-  flex: 1 1 auto;
 }
 
 #wh-estimator .choiceLabel,
 #wh-estimator .quiz_choose-option-content > :first-child {
   color: var(--quiz-text);
   font-size: 16px;
-  font-weight: 500;
-  line-height: 1.2;
+  font-weight: 700;
+  line-height: 1.25;
 }
 
 #wh-estimator .quiz_choose-option-content > :nth-child(2) {
@@ -317,10 +332,8 @@
 
 #wh-estimator .quiz_option-img-wrapper,
 #wh-estimator .oimg {
-  order: 3;
-  flex: 0 0 auto;
-  width: 80px;
-  height: 52px;
+  width: 72px;
+  height: 48px;
   overflow: hidden;
   border-radius: 6px;
   background: var(--quiz-surface-strong);
@@ -385,7 +398,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-top: 2px;
+  margin-top: 4px;
 }
 
 #wh-estimator .quiz_next-button,
@@ -446,7 +459,7 @@
   border: 1px solid var(--quiz-border);
   border-radius: 8px;
   background: var(--quiz-surface);
-  padding: 14px;
+  padding: 14px 16px;
 }
 
 #wh-estimator .quiz_price-preview-top,
@@ -463,7 +476,7 @@
 #wh-estimator .quiz_price-preview-value,
 #wh-estimator .previewPrice {
   color: var(--quiz-text);
-  font-size: clamp(32px, 8vw, 38px);
+  font-size: clamp(30px, 7vw, 36px);
   font-weight: 800;
   line-height: 1;
 }
@@ -609,6 +622,7 @@
 
   #wh-estimator .quiz_main-content,
   #wh-estimator .card {
+    gap: 16px;
     padding: 20px;
   }
 
@@ -623,14 +637,21 @@
   #wh-estimator .quiz-options-wrapper,
   #wh-estimator .choicesList,
   #wh-estimator .choicesGrid {
-    max-height: 300px;
-    padding-right: 8px;
+    max-height: none;
+    padding-right: 0;
+  }
+
+  #wh-estimator .quiz-radio,
+  #wh-estimator .quiz-checkbox,
+  #wh-estimator .choiceMain {
+    min-height: 58px;
+    padding: 13px;
   }
 
   #wh-estimator .quiz_option-img-wrapper,
   #wh-estimator .oimg {
-    width: 68px;
-    height: 46px;
+    width: 64px;
+    height: 44px;
   }
 
   #wh-estimator .quiz_nav-actions,
