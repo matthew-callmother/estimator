@@ -361,7 +361,7 @@
   async function boot() {
     const mount = document.getElementById(MOUNT_ID);
     if (!mount) return;
-    mount.classList.add("wh-estimator", "section_quiz");
+    mount.classList.add("wh-estimator");
 
     let cfg, qmap;
     try {
@@ -452,8 +452,8 @@
                 }),
                 mk("span", { class: "quiz_radio-button", "aria-hidden": "true" }),
                 mk("div", { class: "quiz_choose-option-content" }, [
-                  mk("div", { class: "text-size-16px text-weight-medium text-color-secondary" }, [opt.label]),
-                  opt.tooltip ? mk("div", { class: "text-size-14px text-weight-medium text-color-secondary opacity-50" }, [opt.tooltip]) : null
+                  mk("div", { class: "quiz_option-label" }, [opt.label]),
+                  opt.tooltip ? mk("div", { class: "quiz_option-description" }, [opt.tooltip]) : null
                 ]),
                 optionImageUrl ? mk("div", { class: "quiz_option-img-wrapper" }, [
                   mk("img", { class: "quiz_option-img", src: optionImageUrl, alt: "", loading: "lazy" })
@@ -808,10 +808,10 @@
 
       const questionHeader = mk("div", { class: "quiz-question-content" }, [
         mk("div", { class: "quiz_heading-tooltip-icon-wrapper" }, [
-          mk("div", { class: "text-size-20px text-weight-bold text-color-secondary" }, [q.title || ""]),
+          mk("div", { class: "quiz_question-title" }, [q.title || ""]),
           (q.tip || q.help || q.tooltip) ? tooltip(q.tip || q.help || q.tooltip) : null
         ]),
-        q.subtitle ? mk("div", { class: "text-size-16px text-color-secondary text-weight-medium" }, [q.subtitle]) : null,
+        q.subtitle ? mk("div", { class: "quiz_question-subtitle" }, [q.subtitle]) : null,
         renderQuestionImage(q)
       ]);
 
