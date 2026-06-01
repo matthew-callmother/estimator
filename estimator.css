@@ -56,19 +56,6 @@
   padding: 26px;
 }
 
-#wh-estimator .quiz_intro {
-  display: grid;
-  gap: 24px;
-  padding-bottom: 24px;
-  border-bottom: 3px solid #d3d4dc;
-}
-
-#wh-estimator .quiz_intro-copy {
-  display: grid;
-  gap: 10px;
-}
-
-#wh-estimator .quiz_intro-title,
 #wh-estimator .stepHeader h2,
 #wh-estimator .text-size-20px {
   margin: 0;
@@ -79,7 +66,6 @@
   line-height: 1.08;
 }
 
-#wh-estimator .quiz_intro-subtitle,
 #wh-estimator .stepSub,
 #wh-estimator .text-size-16px {
   margin: 0;
@@ -89,15 +75,16 @@
   line-height: 1.35;
 }
 
-#wh-estimator .quiz_intro-image-wrapper {
+#wh-estimator .quiz_question-image-wrapper {
   width: 100%;
   height: 220px;
+  margin-top: 8px;
   overflow: hidden;
   border-radius: 8px;
   background: #eef0f4;
 }
 
-#wh-estimator .quiz_intro-image {
+#wh-estimator .quiz_question-image {
   display: block;
   width: 100%;
   height: 100%;
@@ -106,7 +93,33 @@
 
 #wh-estimator .quiz_progress-wrap,
 #wh-estimator .progressWrap {
-  display: none;
+  display: grid;
+  gap: 8px;
+}
+
+#wh-estimator .quiz_form-progress,
+#wh-estimator .progressBar {
+  width: 100%;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #d3d4dc;
+}
+
+#wh-estimator .quiz_form-progress-indicator,
+#wh-estimator .progressFill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--quiz-accent);
+  transition: width 180ms ease;
+}
+
+#wh-estimator .quiz_progress-meta,
+#wh-estimator .progressMeta {
+  color: var(--quiz-muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 #wh-estimator .quiz_changable-content,
@@ -236,6 +249,7 @@
   border: 1px solid #c6c8d6;
   border-radius: 999px;
   background: #ffffff;
+  transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
 }
 
 #wh-estimator .quiz_checkbox-button {
@@ -391,13 +405,6 @@
 
 #wh-estimator .quiz_price-preview,
 #wh-estimator .preview {
-  display: none;
-}
-
-#wh-estimator .quiz-step-summary .quiz_price-preview,
-#wh-estimator .quiz-step-submit .quiz_price-preview,
-#wh-estimator .quiz-step-summary .preview,
-#wh-estimator .quiz-step-submit .preview {
   display: grid;
   gap: 6px;
   border: 1px solid var(--quiz-border);
@@ -564,12 +571,11 @@
     padding: 22px;
   }
 
-  #wh-estimator .quiz_intro-title,
   #wh-estimator .stepHeader h2 {
     font-size: 25px;
   }
 
-  #wh-estimator .quiz_intro-image-wrapper {
+  #wh-estimator .quiz_question-image-wrapper {
     height: 180px;
   }
 
