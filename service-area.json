@@ -1,0 +1,6 @@
+{
+  "allowedZips": ["75034", "75035", "75201"],
+  "allowedZipPrefixes": [],
+  "outOfAreaTitle": "Unfortunately, we are not in your service area yet",
+  "outOfAreaMessage": "We are expanding soon. Please check back later."
+}

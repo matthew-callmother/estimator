@@ -5,6 +5,7 @@
   const DEFAULT_BOOKING_ENDPOINT = "https://estimator-sage-xi.vercel.app/api/bookings";
   const DEFAULT_CONFIG_URL = "https://matthew-callmother.github.io/estimator/config.json";
   const DEFAULT_MUNICIPALITIES_URL = "https://matthew-callmother.github.io/estimator/municipalities-dfw.json";
+  const DEFAULT_SERVICE_AREA_URL = "https://matthew-callmother.github.io/estimator/service-area.json";
 
   const MOUNT_ID = "wh-estimator";
   const STORAGE_KEY = "wh_estimator_routing_state";
@@ -40,6 +41,10 @@
 
   function getMunicipalitiesUrl() {
     return window.WH_ESTIMATOR_MUNICIPALITIES_URL || SCRIPT_DATA.municipalitiesUrl || DEFAULT_MUNICIPALITIES_URL;
+  }
+
+  function getServiceAreaUrl() {
+    return window.WH_ESTIMATOR_SERVICE_AREA_URL || SCRIPT_DATA.serviceAreaUrl || DEFAULT_SERVICE_AREA_URL;
   }
 
   function getBookingEndpoint() {
@@ -229,10 +234,14 @@
     return match ? match[0] : "";
   }
 
-  function getServiceAreaStatus(cfg, answers, features) {
+  function getServiceAreaConfig(cfg, sharedServiceArea) {
+    return { ...(sharedServiceArea || {}), ...(cfg.serviceArea || {}) };
+  }
+
+  function getServiceAreaStatus(cfg, answers, features, sharedServiceArea) {
     if (!features.serviceAreaFilter) return { checked: false, eligible: true };
 
-    const serviceArea = cfg.serviceArea || {};
+    const serviceArea = getServiceAreaConfig(cfg, sharedServiceArea);
     const allowedZips = (serviceArea.allowedZips || []).map(normalizeZip).filter(Boolean);
     const allowedZipPrefixes = (serviceArea.allowedZipPrefixes || []).map((prefix) => String(prefix || "").trim()).filter(Boolean);
 
@@ -251,6 +260,19 @@
       title: serviceArea.outOfAreaTitle || "Unfortunately, we are not in your service area yet",
       message: serviceArea.outOfAreaMessage || "We are expanding soon. Please check back later."
     };
+  }
+
+  let SERVICE_AREA_CACHE = null;
+  async function loadServiceAreaIfNeeded(features) {
+    if (!features.serviceAreaFilter) return null;
+    if (SERVICE_AREA_CACHE) return SERVICE_AREA_CACHE;
+    try {
+      SERVICE_AREA_CACHE = await fetchJSON(getServiceAreaUrl());
+    } catch (e) {
+      console.warn("Service area failed to load:", e);
+      SERVICE_AREA_CACHE = {};
+    }
+    return SERVICE_AREA_CACHE;
   }
 
   function buildReadableAnswers(cfg, qmap, answers) {
@@ -774,7 +796,7 @@
         questionId: state.currentId,
         answers: state.answers,
         readableAnswers: buildReadableAnswers(cfg, qmap, state.answers),
-        serviceArea: serviceAreaStatus || getServiceAreaStatus(cfg, state.answers, features),
+        serviceArea: serviceAreaStatus || getServiceAreaStatus(cfg, state.answers, features, SERVICE_AREA_CACHE),
         pageUrl: location.href,
         submittedAt: new Date().toISOString()
       };
@@ -806,7 +828,8 @@
     }
 
     async function submitPayload() {
-      const serviceAreaStatus = getServiceAreaStatus(cfg, state.answers, features);
+      const sharedServiceArea = await loadServiceAreaIfNeeded(features);
+      const serviceAreaStatus = getServiceAreaStatus(cfg, state.answers, features, sharedServiceArea);
       const pr = features.pricing ? sumPricing(cfg, qmap, state) : null;
       const payload = buildBookingPayload(pr, serviceAreaStatus);
 

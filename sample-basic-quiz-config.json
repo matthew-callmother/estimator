@@ -1,0 +1,203 @@
+{
+  "meta": {
+    "estimatorId": "sample-basic-quiz",
+    "serviceName": "Sample basic quiz",
+    "version": "basic-quiz-v1"
+  },
+  "estimatorId": "sample-basic-quiz",
+  "quizName": "Should I Buy a Tankless?",
+  "serviceName": "Sample basic quiz",
+  "features": {
+    "pricing": false,
+    "permitLookup": false,
+    "serviceAreaFilter": true,
+    "serviceTitanBooking": true,
+    "recommendations": false
+  },
+  "start": "priority",
+  "questions": [
+    {
+      "id": "priority",
+      "type": "single_select",
+      "title": "What's most important to you?",
+      "subtitle": "Choose the answer that matters most.",
+      "image_url": "https://cdn.prod.website-files.com/678144dfb4c536263e714199/699886303d4e775bbb86fe2a_Image%20Container.avif",
+      "options": [
+        {
+          "value": "lower_upfront_cost",
+          "label": "Lower upfront cost",
+          "tooltip": "You want the simplest replacement with the lowest install cost.",
+          "next": "home_size"
+        },
+        {
+          "value": "long_term_savings",
+          "label": "Long-term savings",
+          "tooltip": "You care more about efficiency and monthly utility costs.",
+          "next": "home_size"
+        },
+        {
+          "value": "unlimited_hot_water",
+          "label": "Unlimited hot water",
+          "tooltip": "You want better performance for back-to-back showers or large households.",
+          "next": "home_size"
+        }
+      ]
+    },
+    {
+      "id": "home_size",
+      "type": "single_select",
+      "title": "How many people live in your home?",
+      "subtitle": "This helps estimate hot water demand.",
+      "options": [
+        {
+          "value": "one_two",
+          "label": "1-2 people",
+          "next": "current_setup"
+        },
+        {
+          "value": "three_four",
+          "label": "3-4 people",
+          "next": "current_setup"
+        },
+        {
+          "value": "five_plus",
+          "label": "5+ people",
+          "next": "current_setup"
+        }
+      ]
+    },
+    {
+      "id": "current_setup",
+      "type": "single_select",
+      "title": "What do you currently have?",
+      "subtitle": "No problem if you are not sure.",
+      "options": [
+        {
+          "value": "tank",
+          "label": "Tank water heater",
+          "next": "zip_screen"
+        },
+        {
+          "value": "tankless",
+          "label": "Tankless water heater",
+          "next": "zip_screen"
+        },
+        {
+          "value": "not_sure",
+          "label": "Not sure",
+          "next": "zip_screen"
+        }
+      ]
+    },
+    {
+      "id": "zip_screen",
+      "type": "form",
+      "title": "What's your ZIP code?",
+      "subtitle": "We will check whether this quiz is available in your area.",
+      "fields": [
+        {
+          "id": "addr_zip",
+          "label": "ZIP code",
+          "input_type": "text",
+          "required": true,
+          "placeholder": "75034",
+          "autocomplete": "postal-code",
+          "pattern": "^\\d{5}(-\\d{4})?$",
+          "pattern_msg": "Use a 5-digit ZIP"
+        }
+      ],
+      "next_label": "Check Area",
+      "next": "lead_capture"
+    },
+    {
+      "id": "lead_capture",
+      "type": "form",
+      "title": "Where should we follow up?",
+      "subtitle": "Enter your contact and service address details.",
+      "fields": [
+        {
+          "id": "contact_name",
+          "label": "Name",
+          "input_type": "text",
+          "required": true,
+          "placeholder": "Full name",
+          "autocomplete": "name"
+        },
+        {
+          "id": "contact_phone",
+          "label": "Phone",
+          "input_type": "tel",
+          "required": true,
+          "type": "phone",
+          "min_digits": 10,
+          "placeholder": "(555) 555-5555",
+          "autocomplete": "tel"
+        },
+        {
+          "id": "contact_email",
+          "label": "Email",
+          "input_type": "email",
+          "required": false,
+          "type": "email",
+          "placeholder": "you@email.com",
+          "autocomplete": "email"
+        },
+        {
+          "id": "addr_street",
+          "label": "Street",
+          "input_type": "text",
+          "required": true,
+          "placeholder": "123 Main St",
+          "autocomplete": "street-address"
+        },
+        {
+          "id": "addr_unit",
+          "label": "Unit",
+          "input_type": "text",
+          "required": false,
+          "placeholder": "Apt, suite, etc.",
+          "autocomplete": "address-line2"
+        },
+        {
+          "id": "addr_city",
+          "label": "City",
+          "input_type": "text",
+          "required": true,
+          "placeholder": "Frisco",
+          "autocomplete": "address-level2"
+        },
+        {
+          "id": "addr_state",
+          "label": "State",
+          "input_type": "text",
+          "required": true,
+          "placeholder": "TX",
+          "autocomplete": "address-level1",
+          "pattern": "^[A-Za-z]{2}$",
+          "pattern_msg": "Use a 2-letter state code"
+        }
+      ],
+      "next_label": "Review",
+      "next": "result"
+    },
+    {
+      "id": "result",
+      "type": "summary",
+      "title": "Your quiz results",
+      "subtitle": "Review your answers before finishing.",
+      "next_label": "Finish",
+      "next": "submit"
+    },
+    {
+      "id": "submit",
+      "type": "submit",
+      "title": "You're all set",
+      "subtitle": "Thanks for taking the quiz.",
+      "submit_label": "Finish",
+      "pending_label": "Finishing..."
+    }
+  ],
+  "result_copy": {
+    "disclaimer": "This sample quiz does not calculate pricing or create a ServiceTitan booking."
+  }
+}
