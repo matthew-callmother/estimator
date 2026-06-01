@@ -10,12 +10,6 @@
   "serviceName": "Water heater estimate request",
   "defaultCountry": "United States",
   "campaign": "Website Water Heater Estimator",
-  "display": {
-    "introTitle": "Should I Buy a Tankless?",
-    "introSubtitle": "Is a tankless water heater right for your home?",
-    "introImageUrl": "https://cdn.prod.website-files.com/678144dfb4c536263e714199/699886303d4e775bbb86fe2a_Image%20Container.avif",
-    "defaultOptionImageUrl": "https://cdn.prod.website-files.com/678144dfb4c536263e714199/699886531f16edb42e3a709d_Option%20Image%20(1).webp"
-  },
   "pricing": {
     "exact_requires": [
       "addr_street",
@@ -38,6 +32,7 @@
       "type": "single_select",
       "title": "What kind of water heater do you have?",
       "subtitle": "This sets the baseline.",
+      "image_url": "https://cdn.prod.website-files.com/678144dfb4c536263e714199/699886303d4e775bbb86fe2a_Image%20Container.avif",
       "options": [
         {
           "value": "tank",
