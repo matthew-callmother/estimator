@@ -411,13 +411,12 @@
 
     function renderSingleSelect(q, content) {
       const opts = q.options || [];
-      const defaultOptionImageUrl = cfg?.display?.defaultOptionImageUrl || "";
-      const hasImages = opts.some((o) => !!(o.image_url || defaultOptionImageUrl));
+      const hasImages = opts.some((o) => !!o.image_url);
       const wrap = mk("div", { class: `quiz-options-wrapper${hasImages ? " has-images" : ""}` });
 
       opts.forEach((opt) => {
         const active = String(state.answers[q.id]) === String(opt.value);
-        const optionImageUrl = opt.image_url || defaultOptionImageUrl;
+        const optionImageUrl = opt.image_url || "";
 
         wrap.appendChild(
           mk(
@@ -491,22 +490,11 @@
       content.appendChild(formWrap);
     }
 
-    function renderIntro() {
-      const display = cfg.display || {};
-      const title = display.introTitle || cfg.title || cfg.serviceName || "";
-      const subtitle = display.introSubtitle || cfg.subtitle || "";
-      const imageUrl = display.introImageUrl || "";
+    function renderQuestionImage(q) {
+      if (!q?.image_url) return null;
 
-      if (!title && !subtitle && !imageUrl) return null;
-
-      return mk("div", { class: "quiz_intro" }, [
-        title ? mk("div", { class: "quiz_intro-copy" }, [
-          mk("h2", { class: "quiz_intro-title" }, [title]),
-          subtitle ? mk("div", { class: "quiz_intro-subtitle" }, [subtitle]) : null
-        ]) : null,
-        imageUrl ? mk("div", { class: "quiz_intro-image-wrapper" }, [
-          mk("img", { class: "quiz_intro-image", src: imageUrl, alt: "", loading: "lazy" })
-        ]) : null
+      return mk("div", { class: "quiz_question-image-wrapper" }, [
+        mk("img", { class: "quiz_question-image", src: q.image_url, alt: "", loading: "lazy" })
       ]);
     }
 
@@ -525,7 +513,6 @@
 
       const card = mk("div", { class: "quiz_form-component" }, [
         mk("div", { class: "quiz_main-content" }, [
-          renderIntro(),
           renderProgress(progress),
           mk("div", { class: "quiz_changable-content" }, [
             mk("div", { class: "loading" }, [
@@ -804,7 +791,8 @@
           mk("div", { class: "text-size-20px text-weight-bold text-color-secondary" }, [q.title || ""]),
           (q.tip || q.help || q.tooltip) ? tooltip(q.tip || q.help || q.tooltip) : null
         ]),
-        q.subtitle ? mk("div", { class: "text-size-16px text-color-secondary text-weight-medium" }, [q.subtitle]) : null
+        q.subtitle ? mk("div", { class: "text-size-16px text-color-secondary text-weight-medium" }, [q.subtitle]) : null,
+        renderQuestionImage(q)
       ]);
 
       const step = mk("div", { class: `quiz_changable-content quiz-step-${q.type}` }, [
@@ -817,7 +805,6 @@
 
       const container = mk("div", { class: "quiz_form-component" }, [
         mk("div", { class: "quiz_main-content" }, [
-          renderIntro(),
           renderProgress(progress),
           step
         ])
