@@ -238,11 +238,11 @@
   }
 
   function renderProgress(progress) {
-    return mk("div", { class: "progressWrap" }, [
-      mk("div", { class: "progressMeta" }, [`Step ${progress.currentStep} of ${progress.total}`]),
-      mk("div", { class: "progressBar" }, [
-        mk("div", { class: "progressFill", style: `width:${progress.percent}%` })
-      ])
+    return mk("div", { class: "quiz_progress-wrap" }, [
+      mk("div", { class: "quiz_form-progress", role: "progressbar", "aria-valuemin": 0, "aria-valuemax": 100, "aria-valuenow": progress.percent }, [
+        mk("div", { class: "quiz_form-progress-indicator", style: `width:${progress.percent}%` })
+      ]),
+      mk("div", { class: "quiz_progress-meta" }, [`Step ${progress.currentStep} of ${progress.total}`])
     ]);
   }
 
@@ -355,6 +355,7 @@
   async function boot() {
     const mount = document.getElementById(MOUNT_ID);
     if (!mount) return;
+    mount.classList.add("wh-estimator", "section_quiz");
 
     let cfg, qmap;
     try {
@@ -402,25 +403,27 @@
       }
 
       if (pr.low === 0 && pr.high === 0) {
-        return { mode: "empty", label: "Estimated Range", value: "—", sub: "Answer a few questions to see your range.", disclaimer };
+        return { mode: "empty", label: "Estimated Range", value: "-", sub: "Answer a few questions to see your range.", disclaimer };
       }
 
-      return { mode: "range", label: "Estimated Range", value: `$${money(pr.low)}–$${money(pr.high)}`, sub: "Range updates as you go. Add your address to get an exact number.", disclaimer };
+      return { mode: "range", label: "Estimated Range", value: `$${money(pr.low)}-$${money(pr.high)}`, sub: "Range updates as you go. Add your address to get an exact number.", disclaimer };
     }
 
     function renderSingleSelect(q, content) {
       const opts = q.options || [];
-      const hasImages = opts.some((o) => !!o.image_url);
-      const wrap = mk("div", { class: hasImages ? "choicesGrid" : "choicesList" });
+      const defaultOptionImageUrl = cfg?.display?.defaultOptionImageUrl || "";
+      const hasImages = opts.some((o) => !!(o.image_url || defaultOptionImageUrl));
+      const wrap = mk("div", { class: `quiz-options-wrapper${hasImages ? " has-images" : ""}` });
 
       opts.forEach((opt) => {
         const active = String(state.answers[q.id]) === String(opt.value);
+        const optionImageUrl = opt.image_url || defaultOptionImageUrl;
 
         wrap.appendChild(
           mk(
             "div",
             {
-              class: `choice ${active ? "active" : ""} ${opt.image_url ? "hasImg" : ""}`,
+              class: `quiz-option choice ${active ? "is-input-active active" : ""} ${optionImageUrl ? "has-image" : ""}`,
               onClick: () => {
                 state.answers[q.id] = String(opt.value);
                 saveState(state, cfg);
@@ -428,12 +431,15 @@
               }
             },
             [
-              mk("div", { class: "choiceMain" }, [
-                mk("div", { class: "choiceTop" }, [
-                  mk("div", { class: "choiceLabel" }, [opt.label]),
-                  opt.tooltip ? tooltip(opt.tooltip) : null
+              mk("label", { class: "quiz-radio" }, [
+                mk("div", { class: "quiz_choose-option-content" }, [
+                  mk("div", { class: "text-size-16px text-weight-medium text-color-secondary" }, [opt.label]),
+                  opt.tooltip ? mk("div", { class: "text-size-14px text-weight-medium text-color-secondary opacity-50" }, [opt.tooltip]) : null
                 ]),
-                opt.image_url ? mk("img", { class: "oimg", src: opt.image_url, alt: "", loading: "lazy" }) : null
+                mk("div", { class: "quiz_radio-button" }),
+                optionImageUrl ? mk("div", { class: "quiz_option-img-wrapper" }, [
+                  mk("img", { class: "quiz_option-img", src: optionImageUrl, alt: "", loading: "lazy" })
+                ]) : null
               ])
             ]
           )
@@ -444,44 +450,64 @@
     }
 
     // IMPORTANT: no scheduleRender() on input (keeps Android keyboard open)
-        function renderForm(q, content, ui) {
-          (q.fields || []).forEach((f) => {
-            const val = state.answers[f.id] || "";
-            const errEl = mk("div", { class: "fieldErr", style: "display:none" }, [""]);
-        
-            const inputEl = mk("input", {
-              type: f.input_type || "text",
-              value: val,
-              placeholder: f.placeholder || "",
-              autocomplete: f.autocomplete || "",
-              onInput: (e) => {
-                state.answers[f.id] = e.target.value;
-        
-                if (String(f.id).startsWith("addr_")) invalidatePermit(cfg, state);
-                saveState(state, cfg);
-        
-                const r = validateField(f, state.answers[f.id]);
-                if (!r.ok && !isEmpty(state.answers[f.id])) {
-                  errEl.style.display = "block";
-                  errEl.textContent = r.msg;
-                } else {
-                  errEl.style.display = "none";
-                  errEl.textContent = "";
-                }
-        
-                if (ui?.updateNextDisabled) ui.updateNextDisabled();
-                if (ui?.updatePreview) ui.updatePreview();
-              }
-            });
-        
-            content.appendChild(
-              mk("div", { class: "field" }, [
-                mk("label", { class: "fieldLabel" }, [f.label || f.id, f.help ? tooltip(f.help) : null]),
-                inputEl,
-                errEl
-              ])
-            );
-          });
+    function renderForm(q, content, ui) {
+      const formWrap = mk("div", { class: "form-field-wrapper" });
+
+      (q.fields || []).forEach((f) => {
+        const val = state.answers[f.id] || "";
+        const errEl = mk("div", { class: "fieldErr", style: "display:none" }, [""]);
+
+        const inputEl = mk("input", {
+          class: "quiz_text-input-field w-input",
+          type: f.input_type || "text",
+          value: val,
+          placeholder: f.placeholder || "",
+          autocomplete: f.autocomplete || "",
+          onInput: (e) => {
+            state.answers[f.id] = e.target.value;
+
+            if (String(f.id).startsWith("addr_")) invalidatePermit(cfg, state);
+            saveState(state, cfg);
+
+            const r = validateField(f, state.answers[f.id]);
+            if (!r.ok && !isEmpty(state.answers[f.id])) {
+              errEl.style.display = "block";
+              errEl.textContent = r.msg;
+            } else {
+              errEl.style.display = "none";
+              errEl.textContent = "";
+            }
+
+            if (ui?.updateNextDisabled) ui.updateNextDisabled();
+            if (ui?.updatePreview) ui.updatePreview();
+          }
+        });
+
+        formWrap.appendChild(mk("label", { class: "quiz_text-field" }, [f.label || f.id, f.help ? tooltip(f.help) : null]));
+        formWrap.appendChild(inputEl);
+        formWrap.appendChild(errEl);
+      });
+
+      content.appendChild(formWrap);
+    }
+
+    function renderIntro() {
+      const display = cfg.display || {};
+      const title = display.introTitle || cfg.title || cfg.serviceName || "";
+      const subtitle = display.introSubtitle || cfg.subtitle || "";
+      const imageUrl = display.introImageUrl || "";
+
+      if (!title && !subtitle && !imageUrl) return null;
+
+      return mk("div", { class: "quiz_intro" }, [
+        title ? mk("div", { class: "quiz_intro-copy" }, [
+          mk("h2", { class: "quiz_intro-title" }, [title]),
+          subtitle ? mk("div", { class: "quiz_intro-subtitle" }, [subtitle]) : null
+        ]) : null,
+        imageUrl ? mk("div", { class: "quiz_intro-image-wrapper" }, [
+          mk("img", { class: "quiz_intro-image", src: imageUrl, alt: "", loading: "lazy" })
+        ]) : null
+      ]);
     }
 
 
@@ -497,16 +523,19 @@
         : state;
       const progress = calculateProgress(qmap, progressState);
 
-      const card = mk("div", { class: "card" }, [
-        mk("div", { class: "stepHeader" }, [
-          renderProgress(progress)
-        ]),
-        mk("div", { class: "loading" }, [
-          mk("div", { class: "loadingInner" }, [
-            mk("div", { class: "spinner" }),
-            mk("div", { class: "loadingTitle" }, [q.title || "Checking…"]),
-            q.subtitle ? mk("div", { class: "loadingSub" }, [q.subtitle]) : null,
-            mk("div", { class: "loadBar" }, [mk("div", { id: fillId, class: "loadFill", style: "width:0%" })])
+      const card = mk("div", { class: "quiz_form-component" }, [
+        mk("div", { class: "quiz_main-content" }, [
+          renderIntro(),
+          renderProgress(progress),
+          mk("div", { class: "quiz_changable-content" }, [
+            mk("div", { class: "loading" }, [
+              mk("div", { class: "loadingInner" }, [
+                mk("div", { class: "spinner" }),
+                mk("div", { class: "loadingTitle" }, [q.title || "Checking..."]),
+                q.subtitle ? mk("div", { class: "loadingSub" }, [q.subtitle]) : null,
+                mk("div", { class: "loadBar" }, [mk("div", { id: fillId, class: "loadFill", style: "width:0%" })])
+              ])
+            ])
           ])
         ])
       ]);
@@ -671,13 +700,13 @@
 
     function render() {
       saveState(state, cfg);
-    
+
       const q = getQuestion(qmap, state.currentId);
       if (!q) {
         mount.innerHTML = "<p>Missing question in config.</p>";
         return;
       }
-    
+
       // refresh-on-loading: skip
       if (q.type === "loading_lookup") {
         state.currentId = q.next || state.currentId;
@@ -685,31 +714,25 @@
         scheduleRender();
         return;
       }
-    
+
       mount.innerHTML = "";
-    
+
       const progress = calculateProgress(qmap, state);
-    
+
       const pr = sumPricing(cfg, qmap, state);
       const preview = computePreviewLabel(pr);
-    
-      const content = mk("div", { id: "step-content" });
-    
-      const header = mk("div", { class: "stepHeader" }, [
-        renderProgress(progress),
-        mk("h2", {}, [q.title || ""]),
-        q.subtitle ? mk("div", { class: "stepSub" }, [q.subtitle]) : null,
-        // question tooltip rendered as a visible box (optional)
-        (q.tip || q.help || q.tooltip) ? mk("div", { class: "qTip" }, [q.tip || q.help || q.tooltip]) : null
-      ]);
-    
+
+      const content = mk("div", { id: "step-content", class: "quiz_step-content" });
+
       const canGoBack = state.history.length > 0;
       const nextLabel = q.next_label || (q.type === "submit" ? (q.submit_label || "Submit") : "Next");
-    
+
       const submitMessage = mk("div", { class: "note submitMessage", style: "display:none" }, [""]);
-      const backBtn = mk("button", { class: "btn secondary", disabled: !canGoBack, onClick: handleBack }, ["Back"]);
+      const backBtn = canGoBack
+        ? mk("button", { class: "quiz_back-button", onClick: handleBack }, ["Back"])
+        : null;
       const nextBtn = mk("button", {
-        class: "btn",
+        class: "quiz_next-button",
         disabled: !isQuestionComplete(q, state.answers),
         onClick: async () => {
           nextBtn.disabled = true;
@@ -744,20 +767,20 @@
           }
         }
       }, [nextLabel]);
-    
-      const nav = mk("div", { class: "nav" }, [backBtn, nextBtn]);
-    
+
+      const nav = mk("div", { class: "quiz_nav-actions" }, [backBtn, nextBtn]);
+
       // preview nodes (so we don't querySelector before they exist)
       const previewLabelEl = mk("span", {}, [preview.label]);
-      const previewPriceEl = mk("div", { class: "previewPrice" }, [preview.value]);
-      const previewSubEl = mk("div", { class: "previewSub" }, [preview.sub]);
-      const previewTop = mk("div", { class: "previewTop" }, [
+      const previewPriceEl = mk("div", { class: "quiz_price-preview-value previewPrice" }, [preview.value]);
+      const previewSubEl = mk("div", { class: "quiz_price-preview-sub previewSub" }, [preview.sub]);
+      const previewTop = mk("div", { class: "quiz_price-preview-top previewTop" }, [
         previewLabelEl,
         preview.disclaimer ? tooltip(preview.disclaimer) : null
       ]);
-    
-      const previewEl = mk("div", { class: "preview" }, [previewTop, previewPriceEl, previewSubEl]);
-    
+
+      const previewEl = mk("div", { class: "quiz_price-preview preview" }, [previewTop, previewPriceEl, previewSubEl]);
+
       const ui = {
         updateNextDisabled: () => { nextBtn.disabled = !isQuestionComplete(q, state.answers); },
         updatePreview: () => {
@@ -768,15 +791,37 @@
           previewSubEl.textContent = p2.sub;
         }
       };
-    
+
       // body
       if (q.type === "single_select") renderSingleSelect(q, content);
       else if (q.type === "form") renderForm(q, content, ui);
       else if (q.type === "summary") content.appendChild(mk("div", { class: "note" }, ["Review your answers, then continue."]));
       else if (q.type === "submit") content.appendChild(mk("div", { class: "note" }, [q.note || "Submit to lock in this estimate."]));
       else if (q.type === "content") content.appendChild(mk("div", { class: "contentBlock", html: q.html || "" }));
-    
-      const container = mk("div", { class: "card" }, [header, content, submitMessage, nav, previewEl]);
+
+      const questionHeader = mk("div", { class: "quiz-question-content" }, [
+        mk("div", { class: "quiz_heading-tooltip-icon-wrapper" }, [
+          mk("div", { class: "text-size-20px text-weight-bold text-color-secondary" }, [q.title || ""]),
+          (q.tip || q.help || q.tooltip) ? tooltip(q.tip || q.help || q.tooltip) : null
+        ]),
+        q.subtitle ? mk("div", { class: "text-size-16px text-color-secondary text-weight-medium" }, [q.subtitle]) : null
+      ]);
+
+      const step = mk("div", { class: `quiz_changable-content quiz-step-${q.type}` }, [
+        questionHeader,
+        content,
+        submitMessage,
+        previewEl,
+        nav
+      ]);
+
+      const container = mk("div", { class: "quiz_form-component" }, [
+        mk("div", { class: "quiz_main-content" }, [
+          renderIntro(),
+          renderProgress(progress),
+          step
+        ])
+      ]);
       mount.appendChild(container);
     }
 
