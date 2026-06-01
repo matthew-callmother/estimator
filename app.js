@@ -427,33 +427,34 @@
       opts.forEach((opt) => {
         const active = String(state.answers[q.id]) === String(opt.value);
         const optionImageUrl = opt.image_url || "";
+        const selectOption = () => {
+          state.answers[q.id] = String(opt.value);
+          saveState(state, cfg);
+          scheduleRender();
+        };
 
         wrap.appendChild(
           mk(
             "div",
             {
               class: `quiz-option choice ${active ? "is-input-active active" : ""} ${optionImageUrl ? "has-image" : ""}`,
-              role: "radio",
-              tabindex: 0,
-              "aria-checked": String(active),
-              onClick: () => {
-                state.answers[q.id] = String(opt.value);
-                saveState(state, cfg);
-                scheduleRender();
-              },
-              onKeydown: (e) => {
-                if (e.key !== "Enter" && e.key !== " ") return;
-                e.preventDefault();
-                e.currentTarget.click();
-              }
+              onClick: selectOption
             },
             [
               mk("label", { class: "quiz-radio" }, [
+                mk("input", {
+                  class: "quiz_native-radio",
+                  type: "radio",
+                  name: `wh_${q.id}`,
+                  value: opt.value,
+                  checked: active,
+                  onChange: selectOption
+                }),
+                mk("span", { class: "quiz_radio-button", "aria-hidden": "true" }),
                 mk("div", { class: "quiz_choose-option-content" }, [
                   mk("div", { class: "text-size-16px text-weight-medium text-color-secondary" }, [opt.label]),
                   opt.tooltip ? mk("div", { class: "text-size-14px text-weight-medium text-color-secondary opacity-50" }, [opt.tooltip]) : null
                 ]),
-                mk("div", { class: "quiz_radio-button", "aria-hidden": "true" }),
                 optionImageUrl ? mk("div", { class: "quiz_option-img-wrapper" }, [
                   mk("img", { class: "quiz_option-img", src: optionImageUrl, alt: "", loading: "lazy" })
                 ]) : null
