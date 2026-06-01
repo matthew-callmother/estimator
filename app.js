@@ -441,17 +441,17 @@
               onClick: selectOption
             },
             [
-              mk("label", { class: "quiz-radio" }, [
+              mk("label", { class: "wh_choice-radio" }, [
                 mk("input", {
-                  class: "quiz_native-radio",
+                  class: "wh_choice-native-radio",
                   type: "radio",
                   name: `wh_${q.id}`,
                   value: opt.value,
                   checked: active,
                   onChange: selectOption
                 }),
-                mk("span", { class: "quiz_radio-button", "aria-hidden": "true" }),
-                mk("div", { class: "quiz_choose-option-content" }, [
+                mk("span", { class: "wh_choice-radio-button", "aria-hidden": "true" }),
+                mk("div", { class: "wh_choice-content" }, [
                   mk("div", { class: "quiz_option-label" }, [opt.label]),
                   opt.tooltip ? mk("div", { class: "quiz_option-description" }, [opt.tooltip]) : null
                 ]),
@@ -706,13 +706,13 @@
 
     function render() {
       saveState(state, cfg);
-
+    
       const q = getQuestion(qmap, state.currentId);
       if (!q) {
         mount.innerHTML = "<p>Missing question in config.</p>";
         return;
       }
-
+    
       // refresh-on-loading: skip
       if (q.type === "loading_lookup") {
         state.currentId = q.next || state.currentId;
@@ -720,19 +720,19 @@
         scheduleRender();
         return;
       }
-
+    
       mount.innerHTML = "";
-
+    
       const progress = calculateProgress(qmap, state);
-
+    
       const pr = sumPricing(cfg, qmap, state);
       const preview = computePreviewLabel(pr);
-
+    
       const content = mk("div", { id: "step-content", class: "quiz_step-content" });
-
+    
       const canGoBack = state.history.length > 0;
       const nextLabel = q.next_label || (q.type === "submit" ? (q.submit_label || "Submit") : "Next");
-
+    
       const submitMessage = mk("div", { class: "note submitMessage", style: "display:none" }, [""]);
       const backBtn = canGoBack
         ? mk("button", { class: "quiz_back-button", type: "button", onClick: handleBack }, ["Back"])
@@ -774,9 +774,9 @@
           }
         }
       }, [nextLabel]);
-
+    
       const nav = mk("div", { class: "quiz_nav-actions" }, [backBtn, nextBtn]);
-
+    
       // preview nodes (so we don't querySelector before they exist)
       const previewLabelEl = mk("span", {}, [preview.label]);
       const previewPriceEl = mk("div", { class: "quiz_price-preview-value previewPrice" }, [preview.value]);
@@ -785,9 +785,9 @@
         previewLabelEl,
         preview.disclaimer ? tooltip(preview.disclaimer) : null
       ]);
-
+    
       const previewEl = mk("div", { class: "quiz_price-preview preview" }, [previewTop, previewPriceEl, previewSubEl]);
-
+    
       const ui = {
         updateNextDisabled: () => { nextBtn.disabled = !isQuestionComplete(q, state.answers); },
         updatePreview: () => {
@@ -798,7 +798,7 @@
           previewSubEl.textContent = p2.sub;
         }
       };
-
+    
       // body
       if (q.type === "single_select") renderSingleSelect(q, content);
       else if (q.type === "form") renderForm(q, content, ui);
