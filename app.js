@@ -68,7 +68,7 @@
   function tooltip(text) {
     if (!text) return null;
 
-    const tip = mk("span", { class: "tip" }, ["?"]);
+    const tip = mk("span", { class: "tip", role: "button", tabindex: 0, "aria-label": "More information" }, ["?"]);
     const bubble = mk("div", { class: "tipBubble", html: text });
     bubble.style.display = "none";
 
@@ -88,6 +88,12 @@
           { once: true }
         );
       }, 0);
+    });
+
+    tip.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      tip.click();
     });
 
     bubble.addEventListener("click", (e) => e.stopPropagation());
@@ -412,7 +418,11 @@
     function renderSingleSelect(q, content) {
       const opts = q.options || [];
       const hasImages = opts.some((o) => !!o.image_url);
-      const wrap = mk("div", { class: `quiz-options-wrapper${hasImages ? " has-images" : ""}` });
+      const wrap = mk("div", {
+        class: `quiz-options-wrapper${hasImages ? " has-images" : ""}`,
+        role: "radiogroup",
+        "aria-label": q.title || "Choose an option"
+      });
 
       opts.forEach((opt) => {
         const active = String(state.answers[q.id]) === String(opt.value);
@@ -423,10 +433,18 @@
             "div",
             {
               class: `quiz-option choice ${active ? "is-input-active active" : ""} ${optionImageUrl ? "has-image" : ""}`,
+              role: "radio",
+              tabindex: 0,
+              "aria-checked": String(active),
               onClick: () => {
                 state.answers[q.id] = String(opt.value);
                 saveState(state, cfg);
                 scheduleRender();
+              },
+              onKeydown: (e) => {
+                if (e.key !== "Enter" && e.key !== " ") return;
+                e.preventDefault();
+                e.currentTarget.click();
               }
             },
             [
@@ -435,7 +453,7 @@
                   mk("div", { class: "text-size-16px text-weight-medium text-color-secondary" }, [opt.label]),
                   opt.tooltip ? mk("div", { class: "text-size-14px text-weight-medium text-color-secondary opacity-50" }, [opt.tooltip]) : null
                 ]),
-                mk("div", { class: "quiz_radio-button" }),
+                mk("div", { class: "quiz_radio-button", "aria-hidden": "true" }),
                 optionImageUrl ? mk("div", { class: "quiz_option-img-wrapper" }, [
                   mk("img", { class: "quiz_option-img", src: optionImageUrl, alt: "", loading: "lazy" })
                 ]) : null
@@ -716,10 +734,11 @@
 
       const submitMessage = mk("div", { class: "note submitMessage", style: "display:none" }, [""]);
       const backBtn = canGoBack
-        ? mk("button", { class: "quiz_back-button", onClick: handleBack }, ["Back"])
+        ? mk("button", { class: "quiz_back-button", type: "button", onClick: handleBack }, ["Back"])
         : null;
       const nextBtn = mk("button", {
         class: "quiz_next-button",
+        type: "button",
         disabled: !isQuestionComplete(q, state.answers),
         onClick: async () => {
           nextBtn.disabled = true;
