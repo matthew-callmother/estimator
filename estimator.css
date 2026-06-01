@@ -31,11 +31,20 @@
   color: var(--quiz-text);
   background: var(--quiz-bg);
   font-family: var(--quiz-font);
+  font-size: 16px;
+  line-height: 1.4;
 }
 
 #wh-estimator,
 #wh-estimator * {
   box-sizing: border-box;
+}
+
+#wh-estimator button,
+#wh-estimator input,
+#wh-estimator textarea,
+#wh-estimator select {
+  font-family: inherit;
 }
 
 #wh-estimator::before {
@@ -65,7 +74,8 @@
 }
 
 #wh-estimator .stepHeader h2,
-#wh-estimator .text-size-20px {
+#wh-estimator .text-size-20px,
+#wh-estimator .quiz_question-title {
   margin: 0;
   color: var(--quiz-text);
   font-size: 28px;
@@ -75,7 +85,8 @@
 }
 
 #wh-estimator .stepSub,
-#wh-estimator .text-size-16px {
+#wh-estimator .text-size-16px,
+#wh-estimator .quiz_question-subtitle {
   margin: 0;
   color: var(--quiz-text);
   font-size: 16px;
@@ -317,14 +328,16 @@
 }
 
 #wh-estimator .choiceLabel,
-#wh-estimator .quiz_choose-option-content > :first-child {
+#wh-estimator .quiz_choose-option-content > :first-child,
+#wh-estimator .quiz_option-label {
   color: var(--quiz-text);
   font-size: 16px;
   font-weight: 700;
   line-height: 1.25;
 }
 
-#wh-estimator .quiz_choose-option-content > :nth-child(2) {
+#wh-estimator .quiz_choose-option-content > :nth-child(2),
+#wh-estimator .quiz_option-description {
   color: var(--quiz-muted);
   font-size: 14px;
   line-height: 1.35;
