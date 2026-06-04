@@ -21,57 +21,57 @@
     {
       "id": "clog_location",
       "type": "single_select",
-      "title": "Let's start simple: where's your drain problem?",
-      "subtitle": "We'll find your ideal drain cleaning solution in 60 seconds.",
+      "title": "Let's start simple: what's clogged?",
+      "subtitle": "So you have a clogged drain. Where is it?",
       "image_url": "https://cdn.prod.website-files.com/678144dfb4c536263e714199/6798e1c9a130431be9308648_img%203.webp",
       "options": [
         {
-          "value": "kitchen_sink_only",
-          "label": "Kitchen sink only",
+          "value": "kitchen_sink",
+          "label": "Kitchen sink",
           "scores": {
-            "drain_cleaning_fit": 3,
+            "drain_cleaning_fit": 6,
             "hydro_jetting_fit": 0,
             "chain_knocking_fit": 0
           },
           "next": "symptoms"
         },
         {
-          "value": "one_bathroom_one_fixture",
-          "label": "One bathroom, one fixture",
+          "value": "bathroom_toilet",
+          "label": "Bathroom toilet",
           "scores": {
-            "drain_cleaning_fit": 3,
+            "drain_cleaning_fit": 6,
             "hydro_jetting_fit": 0,
             "chain_knocking_fit": 0
           },
           "next": "symptoms"
         },
         {
-          "value": "one_bathroom_multiple_fixtures",
-          "label": "One bathroom, multiple fixtures",
+          "value": "bathroom_toilet_shower_sink",
+          "label": "Bathroom toilet/shower/sink",
           "scores": {
-            "drain_cleaning_fit": 0,
-            "hydro_jetting_fit": 3,
-            "chain_knocking_fit": 1
+            "drain_cleaning_fit": 6,
+            "hydro_jetting_fit": 0,
+            "chain_knocking_fit": 0
           },
           "next": "symptoms"
         },
         {
-          "value": "multiple_bathrooms",
-          "label": "Multiple bathrooms",
+          "value": "multiple_drains",
+          "label": "Multiple drains",
           "scores": {
             "drain_cleaning_fit": 0,
             "hydro_jetting_fit": 3,
-            "chain_knocking_fit": 2
+            "chain_knocking_fit": 0
           },
           "next": "symptoms"
         },
         {
           "value": "all_drains_clogged",
-          "label": "All my drains are clogged",
+          "label": "All drains clogged",
           "scores": {
             "drain_cleaning_fit": 0,
             "hydro_jetting_fit": 3,
-            "chain_knocking_fit": 2
+            "chain_knocking_fit": 0
           },
           "next": "symptoms"
         }
@@ -85,8 +85,8 @@
       "min_selected": 1,
       "options": [
         {
-          "value": "slow_drains",
-          "label": "Slow drains",
+          "value": "drains_working_slowly",
+          "label": "Drains working slowly",
           "scores": {
             "drain_cleaning_fit": 1,
             "hydro_jetting_fit": 1,
@@ -94,11 +94,20 @@
           }
         },
         {
-          "value": "water_backing_up_into_drain",
-          "label": "Water backing up into drain",
+          "value": "standing_water_in_sink",
+          "label": "Standing water in sink",
+          "scores": {
+            "drain_cleaning_fit": 2,
+            "hydro_jetting_fit": 0,
+            "chain_knocking_fit": 0
+          }
+        },
+        {
+          "value": "water_backing_into_shower",
+          "label": "Water backing into shower",
           "scores": {
             "drain_cleaning_fit": 0,
-            "hydro_jetting_fit": 2,
+            "hydro_jetting_fit": 3,
             "chain_knocking_fit": 1
           }
         },
@@ -112,8 +121,17 @@
           }
         },
         {
-          "value": "gurgling_noises_from_pipes",
-          "label": "Gurgling noises from pipes",
+          "value": "gurgling_noises",
+          "label": "Gurgling noises",
+          "scores": {
+            "drain_cleaning_fit": 0,
+            "hydro_jetting_fit": 2,
+            "chain_knocking_fit": 0
+          }
+        },
+        {
+          "value": "ongoing_backups",
+          "label": "Ongoing backups",
           "scores": {
             "drain_cleaning_fit": 0,
             "hydro_jetting_fit": 2,
@@ -121,26 +139,8 @@
           }
         },
         {
-          "value": "toilet_backing_up_into_shower",
-          "label": "Toilet backing up into the shower",
-          "scores": {
-            "drain_cleaning_fit": 0,
-            "hydro_jetting_fit": 3,
-            "chain_knocking_fit": 2
-          }
-        },
-        {
-          "value": "recurring_clogs_and_backups",
-          "label": "Recurring clogs and backups",
-          "scores": {
-            "drain_cleaning_fit": 0,
-            "hydro_jetting_fit": 2,
-            "chain_knocking_fit": 2
-          }
-        },
-        {
           "value": "whole_house_backing_up",
-          "label": "Whole house is backing up",
+          "label": "Whole house backing up",
           "scores": {
             "drain_cleaning_fit": 0,
             "hydro_jetting_fit": 3,
@@ -153,7 +153,7 @@
     {
       "id": "attempted_fixes",
       "type": "multi_select",
-      "title": "What have you tried that hasn't worked?",
+      "title": "What have you already tried? What's the status? Where are we at?",
       "subtitle": "Check all answers that apply.",
       "min_selected": 1,
       "options": [
@@ -167,8 +167,8 @@
           }
         },
         {
-          "value": "bacterial_or_enzyme_drain_cleaner",
-          "label": "Bacterial or enzyme drain cleaner",
+          "value": "plunger",
+          "label": "Plunger",
           "scores": {
             "drain_cleaning_fit": 1,
             "hydro_jetting_fit": 0,
@@ -176,8 +176,8 @@
           }
         },
         {
-          "value": "hardware_store_drain_snake",
-          "label": "Hardware store drain snake",
+          "value": "drain_snake",
+          "label": "Drain Snake",
           "scores": {
             "drain_cleaning_fit": 0,
             "hydro_jetting_fit": 2,
@@ -185,8 +185,8 @@
           }
         },
         {
-          "value": "another_plumber_couldnt_fix_it",
-          "label": "Another plumber couldn't fix it",
+          "value": "other_plumber",
+          "label": "Other Plumber",
           "scores": {
             "drain_cleaning_fit": 0,
             "hydro_jetting_fit": 2,
@@ -194,8 +194,8 @@
           }
         },
         {
-          "value": "havent_tried_anything_yet",
-          "label": "I haven't tried anything yet",
+          "value": "not_touching_that",
+          "label": "I'm not touching that",
           "scores": {
             "drain_cleaning_fit": 1,
             "hydro_jetting_fit": 0,
@@ -208,28 +208,28 @@
     {
       "id": "pipe_material",
       "type": "single_select",
-      "title": "What are your existing sewer pipes made of?",
-      "subtitle": "Choose the answer that applies to most of your pipe materials.",
+      "title": "What material are your sewer pipes made of?",
+      "subtitle": "Choose the best answer.",
       "options": [
         {
-          "value": "pvc_or_schedule_40_pvc",
-          "label": "PVC or Schedule 40 PVC",
+          "value": "pvc",
+          "label": "PVC",
           "scores": {
             "drain_cleaning_fit": 0,
-            "hydro_jetting_fit": 3,
+            "hydro_jetting_fit": 1,
             "chain_knocking_fit": 0
           },
-          "next": "service_need"
+          "next": "result_gate"
         },
         {
           "value": "cast_iron",
-          "label": "Cast iron",
+          "label": "Cast Iron",
           "scores": {
-            "drain_cleaning_fit": 0,
-            "hydro_jetting_fit": 0,
-            "chain_knocking_fit": 3
+            "drain_cleaning_fit": 1,
+            "hydro_jetting_fit": 2,
+            "chain_knocking_fit": 0
           },
-          "next": "service_need"
+          "next": "result_gate"
         },
         {
           "value": "clay",
@@ -237,19 +237,20 @@
           "scores": {
             "drain_cleaning_fit": 0,
             "hydro_jetting_fit": 0,
-            "chain_knocking_fit": 3
+            "chain_knocking_fit": 4
           },
-          "next": "service_need"
+          "next": "result_gate"
         },
         {
           "value": "orangeburg",
           "label": "Orangeburg",
+          "tooltip": "Orangeburg is a bitumen-coated fiber pipe used in some older sewer lines. It can deform, collapse, or become fragile over time.",
           "scores": {
             "drain_cleaning_fit": 0,
             "hydro_jetting_fit": 0,
             "chain_knocking_fit": 4
           },
-          "next": "service_need"
+          "next": "result_gate"
         },
         {
           "value": "not_sure",
@@ -259,44 +260,7 @@
             "hydro_jetting_fit": 0,
             "chain_knocking_fit": 0
           },
-          "next": "service_need"
-        }
-      ]
-    },
-    {
-      "id": "service_need",
-      "type": "single_select",
-      "title": "How can a licensed plumber best serve your needs?",
-      "subtitle": "Choose what matters most for your visit.",
-      "result_strategy": "highest_score",
-      "next": "result_gate",
-      "options": [
-        {
-          "value": "fixed_today",
-          "label": "I need this fixed today",
-          "scores": {
-            "drain_cleaning_fit": 0,
-            "hydro_jetting_fit": 0,
-            "chain_knocking_fit": 0
-          }
-        },
-        {
-          "value": "meet_my_schedule",
-          "label": "I'm constantly traveling - meet my schedule",
-          "scores": {
-            "drain_cleaning_fit": 0,
-            "hydro_jetting_fit": 0,
-            "chain_knocking_fit": 0
-          }
-        },
-        {
-          "value": "done_in_one_trip",
-          "label": "I'm flexible, but I want it done in one trip",
-          "scores": {
-            "drain_cleaning_fit": 0,
-            "hydro_jetting_fit": 0,
-            "chain_knocking_fit": 0
-          }
+          "next": "result_gate"
         }
       ]
     },
@@ -399,7 +363,8 @@
     {
       "id": "drain_cleaning_fit",
       "title": "You Need Drain Cleaning Service",
-      "message": "A complete approach to drain cleaning is right for you. Based on your answers, you're experiencing targeted drain clogs that aren't widespread - that's good news. You're probably not dealing with a sewer backup.\n\nMother offers $299 drain cleaning service with no hidden fees or markups. We guarantee clear drains with a 120-day no clogs promise. Our service includes complete clearing, non-toxic drain cleaning products, a complimentary drain camera inspection, and a free bottle of enzyme drain cleaner for ongoing use.\n\nCall us 24/7 to schedule at (469) 206-9515.",
+      "image_url": "https://cdn.prod.website-files.com/678144dfb4c536263e714199/6a219c53dba6dba4e213a30e_ChatGPT%20Image%20Jun%204%2C%202026%2C%2010_38_31%20AM.webp",
+      "message": "Single clogs are best fixed with Mother's $299 drain cleaning service. We guarantee clear drains with a 120-day no clogs promise, a complimentary drain camera inspection and a free bottle of enzyme drain cleaner for your ongoing use.\n\nCall us 24/7 to schedule at (469) 206-9515!",
       "tie_priority": 10,
       "tie_breaker_reason": "Your answers are balanced, so we recommend drain cleaning first because the issue still appears targeted and this is the simplest starting point.",
       "availability": {
@@ -418,7 +383,8 @@
     {
       "id": "hydro_jetting_fit",
       "title": "Hydro Jetting Is Right For You",
-      "message": "Multiple drain issues or backups among fixtures indicate your blockage is deeper than the drain pipe. That's why attempts to clear it may not have worked - you're not going crazy.\n\nMother's hydro jetting service is right for you. We use a complimentary camera inspection to find your clog and assess your pipe conditions, especially if you have cast iron. Then we use precision hydro jetting service to blast your blockage out of the pipe for good.\n\nIt's all backed by our 120-day no clogs guarantee. Call us 24/7 to schedule at (469) 206-9515.",
+      "image_url": "https://cdn.prod.website-files.com/678144dfb4c536263e714199/6a219c57dd0d4d101e15ace1_ChatGPT%20Image%20Jun%204%2C%202026%2C%2010_38_40%20AM.webp",
+      "message": "Multiple drain issues or backups among fixtures indicates your blockage is deeper than the drain pipe. Mother's hydro jetting service includes a complimentary camera inspection. Then, our hydro jetter blasts away your blockage- with a 120-day no clogs guarantee.\n\nCall us 24/7 to schedule at (469) 206-9515!",
       "tie_priority": 20,
       "tie_breaker_reason": "Your answers are balanced, so we recommend hydro jetting when symptoms suggest the blockage may be deeper than a single fixture.",
       "availability": {
@@ -437,7 +403,8 @@
     {
       "id": "chain_knocking_fit",
       "title": "Chain Knocking Is Your Best Option",
-      "message": "Your answers indicate a systemic blockage in your sewer pipes that affects multiple drains in your house. That's why the clogs keep coming back, often in different places. Your answers also suggest older sewer lines that may not withstand the power of hydro jetting equipment.\n\nChain knocking, also called sewer augering, is a great option for deteriorated sewer pipes, especially in DFW. After a complimentary camera inspection to assess your pipe condition, our technicians knock blockages loose from your main drain line without causing any further damage.\n\nIt's all backed by our 120-day no clogs guarantee. Call us 24/7 to schedule at (469) 206-9515.",
+      "image_url": "https://cdn.prod.website-files.com/678144dfb4c536263e714199/6a219c49c58af0197c2a95a3_ChatGPT%20Image%20Jun%204%2C%202026%2C%2010_39_13%20AM.webp",
+      "message": "Chain knocking is a great option for fragile sewer pipes, especially in DFW. After a complimentary camera inspection to assess your pipe condition, our technicians knock blockages loose from your main drain line without causing any further damage.\n\nIt's all backed by our 120-day no clogs guarantee. Call us 24/7 to schedule at (469) 206-9515!",
       "tie_priority": 30,
       "tie_breaker_reason": "Your answers are balanced, so we recommend chain knocking when older or more delicate pipe material may make hydro jetting less appropriate.",
       "availability": {
