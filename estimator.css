@@ -489,6 +489,9 @@
 #wh-estimator .choiceLabel,
 #wh-estimator .quiz_choose-option-content > :first-child,
 #wh-estimator .quiz_option-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   color: var(--quiz-text);
   font-size: 15.5px;
   font-weight: 700;

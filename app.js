@@ -95,6 +95,17 @@
     bubble.style.display = "none";
 
     const wrap = mk("span", { class: "tipWrap" }, [tip, bubble]);
+    const showBubble = () => {
+      bubble.style.display = "block";
+    };
+    const hideBubble = () => {
+      bubble.style.display = "none";
+    };
+
+    wrap.addEventListener("mouseenter", showBubble);
+    wrap.addEventListener("mouseleave", hideBubble);
+    tip.addEventListener("focus", showBubble);
+    tip.addEventListener("blur", hideBubble);
 
     tip.addEventListener("click", (e) => {
       e.preventDefault();
@@ -105,7 +116,7 @@
         document.addEventListener(
           "click",
           () => {
-            bubble.style.display = "none";
+            hideBubble();
           },
           { once: true }
         );
@@ -120,6 +131,14 @@
 
     bubble.addEventListener("click", (e) => e.stopPropagation());
     return wrap;
+  }
+
+  function getOptionDescription(opt) {
+    return opt?.description || opt?.subtitle || opt?.helper_text || opt?.helperText || "";
+  }
+
+  function getOptionTooltip(opt) {
+    return opt?.tooltip || opt?.help || "";
   }
 
   /* ---------------- Data Loading ---------------- */
@@ -800,6 +819,8 @@
       opts.forEach((opt) => {
         const active = String(state.answers[q.id]) === String(opt.value);
         const optionImageUrl = opt.image_url || "";
+        const optionTooltip = getOptionTooltip(opt);
+        const optionDescription = getOptionDescription(opt);
         let optionEl;
         let inputEl;
         const selectOption = (event) => {
@@ -834,8 +855,8 @@
             inputEl,
             mk("span", { class: "wh_choice-radio-button", "aria-hidden": "true" }),
             mk("div", { class: "wh_choice-content" }, [
-              mk("div", { class: "quiz_option-label" }, [opt.label]),
-              opt.tooltip ? mk("div", { class: "quiz_option-description" }, [opt.tooltip]) : null
+              mk("div", { class: "quiz_option-label" }, [opt.label, optionTooltip ? tooltip(optionTooltip) : null]),
+              optionDescription ? mk("div", { class: "quiz_option-description" }, [optionDescription]) : null
             ]),
             optionImageUrl ? mk("div", { class: "quiz_option-img-wrapper" }, [
               mk("img", { class: "quiz_option-img", src: optionImageUrl, alt: "", loading: "lazy" })
@@ -863,6 +884,8 @@
       opts.forEach((opt) => {
         const active = selectedValues.some((value) => String(value) === String(opt.value));
         const optionImageUrl = opt.image_url || "";
+        const optionTooltip = getOptionTooltip(opt);
+        const optionDescription = getOptionDescription(opt);
         let optionEl;
         let inputEl;
         const toggleOption = (event) => {
@@ -907,8 +930,8 @@
             inputEl,
             mk("span", { class: "wh_choice-radio-button", "aria-hidden": "true" }),
             mk("div", { class: "wh_choice-content" }, [
-              mk("div", { class: "quiz_option-label" }, [opt.label]),
-              opt.tooltip ? mk("div", { class: "quiz_option-description" }, [opt.tooltip]) : null
+              mk("div", { class: "quiz_option-label" }, [opt.label, optionTooltip ? tooltip(optionTooltip) : null]),
+              optionDescription ? mk("div", { class: "quiz_option-description" }, [optionDescription]) : null
             ]),
             optionImageUrl ? mk("div", { class: "quiz_option-img-wrapper" }, [
               mk("img", { class: "quiz_option-img", src: optionImageUrl, alt: "", loading: "lazy" })
