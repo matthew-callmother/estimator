@@ -843,8 +843,7 @@
           mk(
             "div",
             {
-              class: `quiz-option choice ${active ? "is-input-active active" : ""} ${optionImageUrl ? "has-image" : ""}`,
-              onClick: toggleOption
+              class: `quiz-option choice ${active ? "is-input-active active" : ""} ${optionImageUrl ? "has-image" : ""}`
             },
             [
               mk("label", { class: "wh_choice-radio" }, [
@@ -854,10 +853,7 @@
                   name: `wh_${q.id}`,
                   value: opt.value,
                   checked: active,
-                  onClick: (e) => {
-                    e.stopPropagation();
-                    toggleOption();
-                  }
+                  onChange: toggleOption
                 }),
                 mk("span", { class: "wh_choice-radio-button", "aria-hidden": "true" }),
                 mk("div", { class: "wh_choice-content" }, [
