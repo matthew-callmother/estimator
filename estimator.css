@@ -107,19 +107,6 @@
   box-shadow: var(--quiz-shadow);
 }
 
-/* Slim brand bar across the very top of the card. */
-#wh-estimator .quiz_form-component::before,
-#wh-estimator .card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-  z-index: 3;
-  background: var(--quiz-accent-grad);
-}
-
 /* The card grows to its natural content height and lets the host page scroll.
    No viewport cap and no internal scroll region: inside an embed those cause
    clipped/unreachable options and content-width shifts between steps. */
@@ -381,26 +368,15 @@
   border-radius: var(--quiz-radius-md);
   background: var(--quiz-card);
   cursor: pointer;
-  transform: translateY(0);
   transition:
-    transform var(--quiz-motion-fast) var(--quiz-motion-ease),
     border-color var(--quiz-motion-fast) ease,
-    background var(--quiz-motion-fast) ease,
-    box-shadow var(--quiz-motion-fast) ease;
-  will-change: transform;
+    background var(--quiz-motion-fast) ease;
 }
 
 #wh-estimator .quiz-option:hover,
 #wh-estimator .choice:hover {
   border-color: var(--quiz-border-strong);
   background: var(--quiz-surface);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px -10px rgba(6, 6, 48, 0.4);
-}
-
-#wh-estimator .quiz-option:active,
-#wh-estimator .choice:active {
-  transform: translateY(0) scale(0.995);
 }
 
 #wh-estimator .quiz-option.is-input-active,
@@ -466,16 +442,6 @@
   transition: border-color var(--quiz-motion-fast) ease, background var(--quiz-motion-fast) ease, box-shadow var(--quiz-motion-fast) ease;
 }
 
-#wh-estimator .quiz_checkbox-button {
-  border-radius: 7px;
-}
-
-/* Multi-select renders <input type="checkbox">; turn its indicator into a square
-   so "check all that apply" reads correctly (no JS change required). */
-#wh-estimator .wh_choice-native-radio[type="checkbox"] + .wh_choice-radio-button {
-  border-radius: 7px;
-}
-
 /* Selected radio: filled dot. */
 #wh-estimator .quiz-option.is-input-active .wh_choice-radio-button,
 #wh-estimator .quiz-option.is-input-active .quiz_radio-button,
@@ -487,6 +453,7 @@
 
 #wh-estimator .quiz-option.is-input-active .wh_choice-radio-button::after,
 #wh-estimator .quiz-option.is-input-active .quiz_radio-button::after,
+#wh-estimator .quiz-option.is-input-active .quiz_checkbox-button::after,
 #wh-estimator .choice.active .wh_choice-radio-button::after {
   content: "";
   position: absolute;
@@ -494,31 +461,6 @@
   border-radius: inherit;
   background: var(--quiz-accent);
   animation: wh-choice-dot-radio var(--quiz-motion-fast) var(--quiz-motion-ease) both;
-}
-
-/* Selected checkbox: solid accent fill + white check (overrides the dot). */
-#wh-estimator .quiz-option.is-input-active .wh_choice-native-radio[type="checkbox"] + .wh_choice-radio-button,
-#wh-estimator .choice.active .wh_choice-native-radio[type="checkbox"] + .wh_choice-radio-button {
-  background: var(--quiz-accent);
-  border-color: var(--quiz-accent);
-}
-
-#wh-estimator .quiz-option.is-input-active .wh_choice-native-radio[type="checkbox"] + .wh_choice-radio-button::after,
-#wh-estimator .choice.active .wh_choice-native-radio[type="checkbox"] + .wh_choice-radio-button::after {
-  content: "";
-  position: absolute;
-  inset: auto;
-  border-radius: 0;
-  /* Checkmark drawn with a rotated border. */
-  top: 3px;
-  left: 7px;
-  width: 6px;
-  height: 11px;
-  background: none;
-  border: solid #ffffff;
-  border-width: 0 2.5px 2.5px 0;
-  transform: rotate(45deg);
-  animation: wh-choice-dot var(--quiz-motion-fast) var(--quiz-motion-ease) both;
 }
 
 #wh-estimator .wh_choice-native-radio:focus-visible + .wh_choice-radio-button,
@@ -677,7 +619,7 @@
   margin-left: auto;
   border: 0;
   border-radius: 999px;
-  background: var(--quiz-accent-grad);
+  background: var(--quiz-accent);
   color: #ffffff;
   font: inherit;
   font-size: 16px;
@@ -686,35 +628,25 @@
   line-height: 1;
   cursor: pointer;
   padding: 15px 26px;
-  box-shadow: 0 10px 22px -10px rgba(239, 43, 107, 0.7);
-  transform: translateY(0);
-  transition:
-    transform var(--quiz-motion-fast) var(--quiz-motion-ease),
-    box-shadow var(--quiz-motion-fast) ease,
-    background var(--quiz-motion-fast) ease,
+  transition: background var(--quiz-motion-fast) ease,
     opacity var(--quiz-motion-fast) ease;
 }
 
 #wh-estimator .quiz_next-button:hover,
 #wh-estimator .btn:hover {
-  background: linear-gradient(180deg, #ef2b6b 0%, #d31a59 100%);
-  box-shadow: 0 14px 26px -10px rgba(239, 43, 107, 0.75);
-  transform: translateY(-1px);
+  background: var(--quiz-accent-strong);
 }
 
 #wh-estimator .quiz_next-button:active,
 #wh-estimator .btn:active {
-  transform: translateY(0) scale(0.99);
-  box-shadow: 0 6px 14px -8px rgba(239, 43, 107, 0.7);
+  background: var(--quiz-accent-strong);
 }
 
 #wh-estimator .quiz_next-button:disabled,
 #wh-estimator .btn:disabled {
   background: var(--quiz-surface-strong);
   color: var(--quiz-placeholder);
-  box-shadow: none;
   cursor: not-allowed;
-  transform: none;
 }
 
 #wh-estimator .quiz_back-button,
@@ -733,9 +665,7 @@
   font-weight: 700;
   cursor: pointer;
   padding: 13px 24px;
-  transform: translateY(0);
   transition:
-    transform var(--quiz-motion-fast) var(--quiz-motion-ease),
     border-color var(--quiz-motion-fast) ease,
     background var(--quiz-motion-fast) ease,
     color var(--quiz-motion-fast) ease;
@@ -745,12 +675,11 @@
 #wh-estimator .btn.secondary:hover {
   border-color: var(--quiz-border-strong);
   background: var(--quiz-surface);
-  transform: translateY(-1px);
 }
 
 #wh-estimator .quiz_back-button:active,
 #wh-estimator .btn.secondary:active {
-  transform: translateY(0) scale(0.99);
+  background: var(--quiz-surface-strong);
 }
 
 #wh-estimator .quiz_start-over-button {
@@ -768,9 +697,7 @@
   font-weight: 700;
   cursor: pointer;
   padding: 12px 14px;
-  transform: translateY(0);
   transition:
-    transform var(--quiz-motion-fast) var(--quiz-motion-ease),
     border-color var(--quiz-motion-fast) ease,
     background var(--quiz-motion-fast) ease,
     color var(--quiz-motion-fast) ease;
@@ -779,10 +706,6 @@
 #wh-estimator .quiz_start-over-button:hover {
   background: var(--quiz-surface);
   color: var(--quiz-text);
-}
-
-#wh-estimator .quiz_start-over-button:active {
-  transform: translateY(0) scale(0.99);
 }
 
 /* ---------------- Price preview ---------------- */
