@@ -244,7 +244,7 @@
         {
           "value": "orangeburg",
           "label": "Orangeburg",
-          "tooltip": "Orangeburg is a bitumen-coated fiber pipe used in some older sewer lines. It can deform, collapse, or become fragile over time.",
+          "help": "Orangeburg is a bitumen-coated fiber pipe used in some older sewer lines. It can deform, collapse, or become fragile over time.",
           "scores": {
             "drain_cleaning_fit": 0,
             "hydro_jetting_fit": 0,
