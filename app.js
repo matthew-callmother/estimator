@@ -1258,7 +1258,7 @@
       const pr = features.pricing ? sumPricing(cfg, qmap, state) : null;
       const preview = features.pricing ? computePreviewLabel(pr) : null;
     
-      const content = mk("div", { id: "step-content", class: "quiz_step-content" });
+      const content = mk("div", { id: "step-content", class: `quiz_step-content quiz_step-content--${q.type}` });
     
       const canGoBack = state.history.length > 0;
       const isSubmitAction = q.type === "submit" || q.submit_on_next === true;

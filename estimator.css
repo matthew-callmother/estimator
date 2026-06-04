@@ -74,6 +74,8 @@
 
 #wh-estimator .quiz_form-component {
   height: min(760px, calc(100svh - 48px));
+  display: grid;
+  overflow: hidden;
 }
 
 #wh-estimator .quiz_main-content,
@@ -178,8 +180,10 @@
 }
 
 #wh-estimator .quiz_changable-content {
+  height: 100%;
   min-height: 0;
   grid-template-rows: auto minmax(0, 1fr) auto auto auto;
+  overflow: hidden;
 }
 
 #wh-estimator .quiz_step-content {
@@ -188,6 +192,12 @@
   padding-right: 4px;
   scrollbar-color: var(--quiz-border-strong) var(--quiz-surface-strong);
   scrollbar-width: thin;
+}
+
+#wh-estimator .quiz_step-content--single_select,
+#wh-estimator .quiz_step-content--multi_select {
+  overflow: hidden;
+  padding-right: 0;
 }
 
 #wh-estimator .quiz-question-content {
@@ -262,9 +272,11 @@
   display: grid;
   grid-template-columns: 1fr;
   gap: 10px;
-  max-height: none;
-  overflow: visible;
-  padding-right: 0;
+  min-height: 0;
+  max-height: 100%;
+  overflow: auto;
+  align-content: start;
+  padding-right: 4px;
   scrollbar-color: var(--quiz-border-strong) var(--quiz-surface-strong);
   scrollbar-width: thin;
 }
@@ -297,6 +309,7 @@
 #wh-estimator .choice {
   position: relative;
   min-width: 0;
+  overflow: hidden;
   border: 1px solid var(--quiz-border);
   border-radius: 8px;
   background: #ffffff;
@@ -349,9 +362,9 @@
   grid-template-columns: 20px minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  min-height: 60px;
+  min-height: 54px;
   width: 100%;
-  padding: 13px 14px;
+  padding: 10px 14px;
   cursor: pointer;
 }
 
@@ -518,6 +531,7 @@
   align-items: center;
   gap: 12px;
   margin-top: 4px;
+  min-height: 49px;
 }
 
 #wh-estimator .quiz_next-button,
