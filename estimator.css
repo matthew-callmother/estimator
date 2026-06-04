@@ -1,6 +1,6 @@
 /* ===================================================================
-   MOTHER ESTIMATOR STYLES  —  BUILD: 2026-06-04  v10-specificity-fix
-   If you do not see "v10-specificity-fix" at the top of the CSS your browser
+   MOTHER ESTIMATOR STYLES  —  BUILD: 2026-06-04  v11-16x9-images
+   If you do not see "v11-16x9-images" at the top of the CSS your browser
    loads in DevTools, the page is serving an OLD cached file.
    =================================================================== */
 
@@ -160,7 +160,7 @@
 
 #wh-estimator .quiz_question-image-wrapper {
   width: 100%;
-  height: clamp(140px, 22svh, 190px);
+  aspect-ratio: 16 / 9;
   margin-top: 4px;
   overflow: hidden;
   border-radius: var(--quiz-radius-md);
@@ -509,8 +509,8 @@
 
 #wh-estimator .quiz_option-img-wrapper,
 #wh-estimator .oimg {
-  width: 76px;
-  height: 52px;
+  width: 100%;
+  aspect-ratio: 16 / 9;
   overflow: hidden;
   border-radius: 9px;
   background: var(--quiz-surface-strong);
@@ -1062,11 +1062,6 @@
     padding: 14px;
   }
 
-  #wh-estimator .quiz_option-img-wrapper,
-  #wh-estimator .oimg {
-    width: 66px;
-    height: 46px;
-  }
 }
 
 /* Nav stacks only on true phone widths. Between 601-700px the Back/Next row
@@ -1167,4 +1162,64 @@
   align-items: center !important;
   justify-content: center !important;
   text-align: center !important;
+}
+
+/* ===================================================================
+   16:9 IMAGE MODE (v11)
+   Only active when options/questions carry images. Every image sits in
+   a 16:9 box (aspect-ratio + object-fit:cover) so widescreen sources
+   display in full without cropping. Image-bearing options become cards
+   with the 16:9 image as a full-bleed banner on top and the radio +
+   label beneath. Text-only steps are unaffected.
+   =================================================================== */
+#wh-estimator .quiz-option.has-image .wh_choice-radio {
+  grid-template-columns: 22px minmax(0, 1fr);
+  grid-template-areas:
+    "img img"
+    "marker content";
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 0;
+  padding: 0 16px 14px;
+  min-height: 0;
+}
+
+/* Full-bleed 16:9 banner (cancels the label's 16px side padding so the
+   image meets the card edges; the card's overflow:hidden + radius round
+   its top corners). */
+#wh-estimator .quiz-option.has-image .quiz_option-img-wrapper,
+#wh-estimator .quiz-option.has-image .oimg {
+  grid-area: img;
+  width: auto;
+  height: auto !important;
+  justify-self: stretch;
+  margin: 0 -16px 12px;
+  aspect-ratio: 16 / 9;
+  border-radius: 0;
+  background: var(--quiz-surface-strong);
+}
+
+#wh-estimator .quiz-option.has-image .wh_choice-radio-button {
+  grid-area: marker;
+}
+
+#wh-estimator .quiz-option.has-image .wh_choice-content {
+  grid-area: content;
+}
+
+/* Desktop: lay image cards two-up so the 16:9 images stay a sensible size
+   and more options are visible at once. Higher specificity + later source
+   order so it wins over the single-column hardening rule. */
+@media (min-width: 601px) {
+  #wh-estimator .quiz-options-wrapper.has-images {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 12px;
+  }
+}
+
+/* Mobile keeps a single column: full-width 16:9 banners. */
+@media (max-width: 600px) {
+  #wh-estimator .quiz-options-wrapper.has-images {
+    grid-template-columns: 1fr !important;
+  }
 }
