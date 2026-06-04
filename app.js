@@ -9,7 +9,7 @@
 
   const MOUNT_ID = "wh-estimator";
   const STORAGE_KEY = "wh_estimator_routing_state";
-  const PROGRESS_COUNTED_TYPES = new Set(["single_select", "form", "summary"]);
+  const PROGRESS_COUNTED_TYPES = new Set(["single_select", "multi_select", "form", "summary"]);
   const CANONICAL_LEAD_FIELD_IDS = new Set([
     "contact_name",
     "contact_phone",
@@ -158,7 +158,11 @@
       meta: {
         permit_done: false,
         permit_sig: null,
-        address_submitted_sig: null
+        address_submitted_sig: null,
+        selected_result_id: null,
+        selected_result_source: null,
+        service_area_status: null,
+        service_area_sig: null
       }
     };
   }
@@ -197,10 +201,38 @@
     localStorage.setItem(getStorageKey(cfg), JSON.stringify(state));
   }
 
+  function resetEstimatorState(cfg, state) {
+    const fresh = defaultState();
+    fresh.currentId = cfg.start || (cfg.questions?.[0]?.id ?? null);
+
+    state.currentId = fresh.currentId;
+    state.answers = fresh.answers;
+    state.history = fresh.history;
+    state.meta = fresh.meta;
+
+    localStorage.removeItem(getStorageKey(cfg));
+    localStorage.removeItem(STORAGE_KEY);
+  }
+
+  function hasQuizProgress(cfg, state) {
+    const startId = cfg.start || (cfg.questions?.[0]?.id ?? null);
+    const hasAnswers = Object.values(state.answers || {}).some((value) => {
+      if (Array.isArray(value)) return value.length > 0;
+      return !isEmpty(value);
+    });
+
+    return Boolean(
+      hasAnswers ||
+      (state.history || []).length ||
+      (state.currentId && state.currentId !== startId)
+    );
+  }
+
   /* ---------------- Config helpers ---------------- */
   function indexQuestions(cfg) {
     const map = new Map();
     (cfg.questions || []).forEach((q) => map.set(q.id, q));
+    (cfg.results || []).forEach((r) => map.set(r.id, { type: "result", ...r }));
     return map;
   }
 
@@ -210,6 +242,13 @@
 
   function getOption(q, value) {
     return (q?.options || []).find((o) => String(o.value) === String(value)) || null;
+  }
+
+  function getOptions(q, values) {
+    const selected = Array.isArray(values) ? values : [];
+    return selected
+      .map((value) => getOption(q, value))
+      .filter(Boolean);
   }
 
   function getFeatures(cfg) {
@@ -269,6 +308,19 @@
     };
   }
 
+  function resetServiceAreaStatus(state) {
+    state.meta.service_area_status = null;
+    state.meta.service_area_sig = null;
+  }
+
+  function getStoredServiceAreaStatus(state) {
+    const zip = normalizeZip(state.answers?.addr_zip);
+    const status = state.meta?.service_area_status || null;
+    const sig = state.meta?.service_area_sig || null;
+    if (!zip || !status || sig !== zip) return null;
+    return status;
+  }
+
   let SERVICE_AREA_CACHE = null;
   async function loadServiceAreaIfNeeded(features) {
     if (!features.serviceAreaFilter) return null;
@@ -298,6 +350,18 @@
           question: q.title || q.id,
           value,
           answer: opt?.label || value
+        });
+      }
+
+      if (q.type === "multi_select") {
+        const values = Array.isArray(answers[q.id]) ? answers[q.id] : [];
+        if (!values.length) continue;
+        const labels = values.map((value) => getOption(q, value)?.label || value);
+        readable.push({
+          questionId: q.id,
+          question: q.title || q.id,
+          value: values,
+          answer: labels.join(", ")
         });
       }
 
@@ -332,21 +396,95 @@
     return [...new Set(values.filter(Boolean))];
   }
 
-  function getAllNextQuestionIds(q) {
+  function getAllNextQuestionIds(q, cfg) {
     if (!q) return [];
 
-    const optionNextIds = q.type === "single_select"
+    const optionNextIds = (q.type === "single_select" || q.type === "multi_select")
       ? (q.options || []).map((opt) => opt.next)
       : [];
+    const availabilityNextIds = q.type === "result" && q.availability
+      ? Object.values(q.availability).map((availability) => availability?.next)
+      : [];
 
-    return uniqueValues([...optionNextIds, q.next]);
+    const nextIds = [...optionNextIds, q.next, ...availabilityNextIds].flatMap((nextId) => {
+      if (nextId === "$winning_result") return (cfg.results || []).map((result) => result.id);
+      return nextId;
+    });
+
+    return uniqueValues(nextIds);
+  }
+
+  function getResultById(cfg, id) {
+    return (cfg.results || []).find((result) => String(result.id) === String(id)) || null;
+  }
+
+  function getResultScores(cfg, answers) {
+    const scores = {};
+
+    for (const result of (cfg.results || [])) {
+      if (result?.id) scores[result.id] = 0;
+    }
+
+    for (const q of (cfg.questions || [])) {
+      const values = q.type === "multi_select"
+        ? (Array.isArray(answers[q.id]) ? answers[q.id] : [])
+        : [answers[q.id]];
+
+      for (const opt of getOptions(q, values)) {
+        for (const [resultId, points] of Object.entries(opt.scores || {})) {
+          scores[resultId] = (Number(scores[resultId]) || 0) + (Number(points) || 0);
+        }
+      }
+    }
+
+    return scores;
+  }
+
+  function getWinningResultId(cfg, answers) {
+    return getWinningResultOutcome(cfg, answers).winnerId;
+  }
+
+  function getWinningResultOutcome(cfg, answers) {
+    const scores = getResultScores(cfg, answers);
+    const results = cfg.results || [];
+    let winningScore = -Infinity;
+    const tiedResultIds = [];
+
+    for (const result of results) {
+      const score = Number(scores[result.id]) || 0;
+      if (score > winningScore) {
+        winningScore = score;
+        tiedResultIds.length = 0;
+        tiedResultIds.push(result.id);
+      } else if (score === winningScore) {
+        tiedResultIds.push(result.id);
+      }
+    }
+
+    const isTie = tiedResultIds.length > 1;
+    const tiedResults = tiedResultIds
+      .map((id) => getResultById(cfg, id))
+      .filter(Boolean);
+    const tieWinner = isTie
+      ? tiedResults.reduce((best, result) => {
+        const bestPriority = Number(best?.tie_priority ?? best?.tiePriority ?? 0) || 0;
+        const resultPriority = Number(result?.tie_priority ?? result?.tiePriority ?? 0) || 0;
+        return resultPriority > bestPriority ? result : best;
+      }, tiedResults[0] || null)
+      : null;
+    const winnerId = tieWinner?.id || tiedResultIds[0] || null;
+    const tieBreakerReason = isTie
+      ? tieWinner?.tie_breaker_reason || tieWinner?.tieBreakerReason || null
+      : null;
+
+    return { winnerId, scores, isTie, tiedResultIds, tieBreakerReason };
   }
 
   function isProgressCountedQuestion(q) {
     return !!q && PROGRESS_COUNTED_TYPES.has(q.type);
   }
 
-  function longestCountedPathFrom(qmap, id, seen = new Set()) {
+  function longestCountedPathFrom(qmap, cfg, id, seen = new Set()) {
     const q = getQuestion(qmap, id);
     if (!q || seen.has(id)) return 0;
 
@@ -354,23 +492,23 @@
     nextSeen.add(id);
 
     const ownStep = isProgressCountedQuestion(q) ? 1 : 0;
-    const nextIds = getAllNextQuestionIds(q);
+    const nextIds = getAllNextQuestionIds(q, cfg);
     const longestNext = nextIds.reduce(
-      (longest, nextId) => Math.max(longest, longestCountedPathFrom(qmap, nextId, nextSeen)),
+      (longest, nextId) => Math.max(longest, longestCountedPathFrom(qmap, cfg, nextId, nextSeen)),
       0
     );
 
     return ownStep + longestNext;
   }
 
-  function calculateProgress(qmap, state) {
+  function calculateProgress(qmap, cfg, state) {
     const q = getQuestion(qmap, state.currentId);
     const completedHistory = (state.history || []).reduce((count, id) => {
       return count + (isProgressCountedQuestion(getQuestion(qmap, id)) ? 1 : 0);
     }, 0);
 
     const completed = completedHistory;
-    const remaining = longestCountedPathFrom(qmap, state.currentId);
+    const remaining = longestCountedPathFrom(qmap, cfg, state.currentId);
 
     const total = Math.max(completed + remaining, completed, 1);
     const currentStep = isProgressCountedQuestion(q)
@@ -396,23 +534,28 @@
     const selectedOptionPricing = [];
 
     for (const q of (cfg.questions || [])) {
-      if (q.type !== "single_select") continue;
-      const v = state.answers[q.id];
-      if (isEmpty(v)) continue;
+      if (q.type !== "single_select" && q.type !== "multi_select") continue;
+      const values = q.type === "multi_select"
+        ? (Array.isArray(state.answers[q.id]) ? state.answers[q.id] : [])
+        : [state.answers[q.id]];
 
-      const opt = getOption(q, v);
-      if (!opt || (!opt.pricing && !opt.price)) continue; // FIX: allow either key
+      for (const v of values) {
+        if (isEmpty(v)) continue;
 
-      const p = opt.pricing || opt.price || {};
-      const l = Number(p.low ?? 0) || 0;
-      const h = Number(p.high ?? l) || 0;
-      const e = Number(p.exact ?? h) || 0;
+        const opt = getOption(q, v);
+        if (!opt || (!opt.pricing && !opt.price)) continue; // FIX: allow either key
 
-      low += l;
-      high += h;
-      exact += e;
+        const p = opt.pricing || opt.price || {};
+        const l = Number(p.low ?? 0) || 0;
+        const h = Number(p.high ?? l) || 0;
+        const e = Number(p.exact ?? h) || 0;
 
-      selectedOptionPricing.push({ qid: q.id, value: v, low: l, high: h, exact: e });
+        low += l;
+        high += h;
+        exact += e;
+
+        selectedOptionPricing.push({ qid: q.id, value: v, low: l, high: h, exact: e });
+      }
     }
 
     if (state.meta.permit_done && state.meta.permit_sig === computeAddressSig(cfg, state.answers)) {
@@ -457,6 +600,12 @@
     if (!q) return true;
 
     if (q.type === "single_select") return !isEmpty(answers[q.id]);
+
+    if (q.type === "multi_select") {
+      const values = Array.isArray(answers[q.id]) ? answers[q.id] : [];
+      const min = Number(q.min_selected ?? q.minSelected ?? 1) || 1;
+      return values.length >= min;
+    }
 
     if (q.type === "form") {
       for (const f of q.fields || []) {
@@ -521,6 +670,7 @@
     }
 
     let renderQueued = false;
+    let lastRenderedStepId = null;
     const scheduleRender = () => {
       if (renderQueued) return;
       renderQueued = true;
@@ -529,6 +679,60 @@
         render();
       });
     };
+
+    async function updateServiceAreaStatus() {
+      const sharedServiceArea = await loadServiceAreaIfNeeded(features);
+      const status = getServiceAreaStatus(cfg, state.answers, features, sharedServiceArea);
+      state.meta.service_area_status = status;
+      state.meta.service_area_sig = normalizeZip(state.answers.addr_zip);
+      saveState(state, cfg);
+      return status;
+    }
+
+    function getResultAvailabilityBlock(result) {
+      if (!result?.availability) return null;
+
+      const status = getStoredServiceAreaStatus(state);
+      if (!status?.checked) return result.availability.default || null;
+
+      return status.eligible
+        ? result.availability.in_area || result.availability.inArea || result.availability.default || null
+        : result.availability.out_of_area || result.availability.outOfArea || result.availability.default || null;
+    }
+
+    function getEffectiveNextId(q) {
+      if (q?.type === "result") {
+        const availability = getResultAvailabilityBlock(q);
+        if (availability && Object.prototype.hasOwnProperty.call(availability, "next")) {
+          return availability.next || null;
+        }
+      }
+
+      return q?.next || null;
+    }
+
+    function getEffectiveNextLabel(q, fallback) {
+      if (q?.type === "result") {
+        const availability = getResultAvailabilityBlock(q);
+        return availability?.next_label || availability?.nextLabel || q.next_label || fallback;
+      }
+
+      return q?.next_label || fallback;
+    }
+
+    function formatResultText(text, result) {
+      if (!text) return "";
+
+      const status = getStoredServiceAreaStatus(state);
+      const tokens = {
+        selected_result_title: result?.title || "",
+        selected_result_message: result?.message || "",
+        addr_zip: state.answers.addr_zip || "",
+        service_area_zip: status?.zip || ""
+      };
+
+      return String(text).replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key) => tokens[key] || "");
+    }
 
     function computePreviewLabel(pr) {
       const disclaimer = cfg?.result_copy?.disclaimer || "";
@@ -606,6 +810,72 @@
       content.appendChild(wrap);
     }
 
+    function renderMultiSelect(q, content) {
+      const opts = q.options || [];
+      const selectedValues = Array.isArray(state.answers[q.id]) ? state.answers[q.id] : [];
+      const max = Number(q.max_selected ?? q.maxSelected ?? 0) || 0;
+      const hasImages = opts.some((o) => !!o.image_url);
+      const wrap = mk("div", {
+        class: `quiz-options-wrapper${hasImages ? " has-images" : ""}`,
+        role: "group",
+        "aria-label": q.title || "Choose options"
+      });
+
+      opts.forEach((opt) => {
+        const active = selectedValues.some((value) => String(value) === String(opt.value));
+        const optionImageUrl = opt.image_url || "";
+        const toggleOption = () => {
+          const currentValues = Array.isArray(state.answers[q.id]) ? [...state.answers[q.id]] : [];
+          const existingIndex = currentValues.findIndex((value) => String(value) === String(opt.value));
+
+          if (existingIndex >= 0) {
+            currentValues.splice(existingIndex, 1);
+          } else if (!max || currentValues.length < max) {
+            currentValues.push(String(opt.value));
+          }
+
+          state.answers[q.id] = currentValues;
+          saveState(state, cfg);
+          scheduleRender();
+        };
+
+        wrap.appendChild(
+          mk(
+            "div",
+            {
+              class: `quiz-option choice ${active ? "is-input-active active" : ""} ${optionImageUrl ? "has-image" : ""}`,
+              onClick: toggleOption
+            },
+            [
+              mk("label", { class: "wh_choice-radio" }, [
+                mk("input", {
+                  class: "wh_choice-native-radio",
+                  type: "checkbox",
+                  name: `wh_${q.id}`,
+                  value: opt.value,
+                  checked: active,
+                  onClick: (e) => {
+                    e.stopPropagation();
+                    toggleOption();
+                  }
+                }),
+                mk("span", { class: "wh_choice-radio-button", "aria-hidden": "true" }),
+                mk("div", { class: "wh_choice-content" }, [
+                  mk("div", { class: "quiz_option-label" }, [opt.label]),
+                  opt.tooltip ? mk("div", { class: "quiz_option-description" }, [opt.tooltip]) : null
+                ]),
+                optionImageUrl ? mk("div", { class: "quiz_option-img-wrapper" }, [
+                  mk("img", { class: "quiz_option-img", src: optionImageUrl, alt: "", loading: "lazy" })
+                ]) : null
+              ])
+            ]
+          )
+        );
+      });
+
+      content.appendChild(wrap);
+    }
+
     // IMPORTANT: no scheduleRender() on input (keeps Android keyboard open)
     function renderForm(q, content, ui) {
       const formWrap = mk("div", { class: "form-field-wrapper" });
@@ -624,6 +894,7 @@
             state.answers[f.id] = e.target.value;
 
             if (String(f.id).startsWith("addr_")) invalidatePermit(cfg, state);
+            if (f.id === "addr_zip") resetServiceAreaStatus(state);
             saveState(state, cfg);
 
             const r = validateField(f, state.answers[f.id]);
@@ -656,6 +927,31 @@
       ]);
     }
 
+    function renderResult(q, content) {
+      const scores = getResultScores(cfg, state.answers);
+      const outcome = getWinningResultOutcome(cfg, state.answers);
+      const isScoredTieResult = state.meta.selected_result_source === "highest_score" && outcome.isTie && outcome.winnerId === q.id;
+      const showScores = q.show_scores === true || q.showScores === true;
+      const availability = getResultAvailabilityBlock(q);
+      const message = isScoredTieResult && outcome.tieBreakerReason
+        ? outcome.tieBreakerReason
+        : q.message || q.subtitle || "";
+      const availabilityMessage = availability?.message || "";
+      const availabilityAdvice = availability?.advice || "";
+
+      content.appendChild(mk("div", { class: "quiz_result-content" }, [
+        message ? mk("div", { class: "quiz_result-message" }, [formatResultText(message, q)]) : null,
+        q.html ? mk("div", { class: "contentBlock", html: q.html }) : null,
+        availabilityMessage || availabilityAdvice ? mk("div", { class: "quiz_result-availability note" }, [
+          availabilityMessage ? mk("div", { class: "quiz_result-availability-message" }, [formatResultText(availabilityMessage, q)]) : null,
+          availabilityAdvice ? mk("div", { class: "quiz_result-availability-advice" }, [formatResultText(availabilityAdvice, q)]) : null
+        ]) : null,
+        showScores ? mk("div", { class: "note quiz_result-scores" }, [
+          (cfg.results || []).map((result) => `${result.title || result.id}: ${Number(scores[result.id]) || 0}`).join("\n")
+        ]) : null
+      ]));
+    }
+
 
     function renderLoadingStep(q, submittedId) {
       mount.innerHTML = "";
@@ -667,7 +963,7 @@
       const progressState = submittedId
         ? { ...state, currentId: q.id, history: [...state.history, submittedId] }
         : state;
-      const progress = calculateProgress(qmap, progressState);
+      const progress = calculateProgress(qmap, cfg, progressState);
 
       const card = mk("div", { class: "quiz_form-component" }, [
         mk("div", { class: "quiz_main-content" }, [
@@ -717,12 +1013,46 @@
         state.meta.address_submitted_sig = computeAddressSig(cfg, state.answers);
       }
 
-      let nextId = current.next || null;
+      let nextId = getEffectiveNextId(current);
 
       if (current.type === "single_select") {
         const v = state.answers[current.id];
         const opt = getOption(current, v);
         if (opt?.next) nextId = opt.next;
+      }
+
+      if (current.type === "multi_select") {
+        const values = Array.isArray(state.answers[current.id]) ? state.answers[current.id] : [];
+        const selectedOptions = getOptions(current, values);
+        if (!nextId) {
+          const optionNext = selectedOptions.find((opt) => opt.next)?.next;
+          if (optionNext) nextId = optionNext;
+        }
+      }
+
+      const shouldScoreResult = current.result_strategy === "highest_score" || current.resultStrategy === "highest_score";
+
+      if (shouldScoreResult) {
+        state.meta.selected_result_id = getWinningResultId(cfg, state.answers);
+        state.meta.selected_result_source = "highest_score";
+      }
+
+      if (current.result_gate === true || current.resultGate === true || current.reveals_result === true || current.revealsResult === true) {
+        await updateServiceAreaStatus();
+      }
+
+      const revealsWinningResult = nextId === "$winning_result" || nextId === "$selected_result";
+      if (revealsWinningResult) {
+        if (!state.meta.selected_result_id) {
+          state.meta.selected_result_id = getWinningResultId(cfg, state.answers);
+          state.meta.selected_result_source = "highest_score";
+        }
+        nextId = state.meta.selected_result_id;
+      }
+
+      if (getResultById(cfg, nextId) && !revealsWinningResult && !shouldScoreResult) {
+        state.meta.selected_result_id = nextId;
+        state.meta.selected_result_source = "direct";
       }
 
       if (!nextId) return;
@@ -784,9 +1114,22 @@
       scheduleRender();
     }
 
+    function handleStartOver() {
+      const confirmed = window.confirm("Start this quiz over? Your answers will be cleared.");
+      if (!confirmed) return;
+
+      resetEstimatorState(cfg, state);
+      saveState(state, cfg);
+      scheduleRender();
+    }
+
     function buildBookingPayload(pr, serviceAreaStatus) {
       const estimatorId = cfg.estimatorId || cfg.meta?.estimatorId || "water-heater";
       const serviceName = cfg.serviceName || cfg.meta?.serviceName || "Water heater estimate request";
+      const resultOutcome = getWinningResultOutcome(cfg, state.answers);
+      const selectedResultId = state.meta.selected_result_id || resultOutcome.winnerId;
+      const selectedResult = getResultById(cfg, selectedResultId);
+      const selectedResultUsesScoring = state.meta.selected_result_source === "highest_score" || (!state.meta.selected_result_id && Boolean(resultOutcome.winnerId));
       const payload = {
         estimatorId,
         quizId: estimatorId,
@@ -810,6 +1153,15 @@
         questionId: state.currentId,
         answers: state.answers,
         readableAnswers: buildReadableAnswers(cfg, qmap, state.answers),
+        selectedResult: selectedResult ? {
+          id: selectedResult.id,
+          title: selectedResult.title || selectedResult.id,
+          message: selectedResult.message || "",
+          isTie: selectedResultUsesScoring ? resultOutcome.isTie : false,
+          tiedResultIds: selectedResultUsesScoring ? resultOutcome.tiedResultIds : [],
+          tieBreakerReason: selectedResultUsesScoring ? resultOutcome.tieBreakerReason : null,
+          scores: selectedResultUsesScoring ? resultOutcome.scores : {}
+        } : null,
         serviceArea: serviceAreaStatus || getServiceAreaStatus(cfg, state.answers, features, SERVICE_AREA_CACHE),
         pageUrl: location.href,
         submittedAt: new Date().toISOString()
@@ -892,6 +1244,7 @@
         mount.innerHTML = "<p>Missing question in config.</p>";
         return;
       }
+      const isNewStep = q.id !== lastRenderedStepId;
     
       // refresh-on-loading: skip
       if (q.type === "loading_lookup") {
@@ -903,7 +1256,7 @@
     
       mount.innerHTML = "";
     
-      const progress = calculateProgress(qmap, state);
+      const progress = calculateProgress(qmap, cfg, state);
     
       const pr = features.pricing ? sumPricing(cfg, qmap, state) : null;
       const preview = features.pricing ? computePreviewLabel(pr) : null;
@@ -912,13 +1265,18 @@
     
       const canGoBack = state.history.length > 0;
       const isSubmitAction = q.type === "submit" || q.submit_on_next === true;
-      const nextLabel = q.next_label || (isSubmitAction ? (q.submit_label || "Submit") : "Next");
+      const effectiveNextId = getEffectiveNextId(q);
+      const hasNextAction = !(q.type === "result" && !effectiveNextId);
+      const nextLabel = getEffectiveNextLabel(q, isSubmitAction ? (q.submit_label || "Submit") : "Next");
     
       const submitMessage = mk("div", { class: "note submitMessage", style: "display:none" }, [""]);
       const backBtn = canGoBack
         ? mk("button", { class: "quiz_back-button", type: "button", onClick: handleBack }, ["Back"])
         : null;
-      const nextBtn = mk("button", {
+      const startOverBtn = hasQuizProgress(cfg, state)
+        ? mk("button", { class: "quiz_start-over-button", type: "button", onClick: handleStartOver }, ["Start over"])
+        : null;
+      const nextBtn = hasNextAction ? mk("button", {
         class: "quiz_next-button",
         type: "button",
         disabled: !isQuestionComplete(q, state.answers),
@@ -959,9 +1317,9 @@
             nextBtn.textContent = originalLabel;
           }
         }
-      }, [nextLabel]);
+      }, [nextLabel]) : null;
     
-      const nav = mk("div", { class: "quiz_nav-actions" }, [backBtn, nextBtn]);
+      const nav = mk("div", { class: "quiz_nav-actions" }, [backBtn, startOverBtn, nextBtn]);
     
       // preview nodes (so we don't querySelector before they exist)
       const previewLabelEl = features.pricing ? mk("span", {}, [preview.label]) : null;
@@ -975,7 +1333,9 @@
       const previewEl = features.pricing ? mk("div", { class: "quiz_price-preview preview" }, [previewTop, previewPriceEl, previewSubEl]) : null;
     
       const ui = {
-        updateNextDisabled: () => { nextBtn.disabled = !isQuestionComplete(q, state.answers); },
+        updateNextDisabled: () => {
+          if (nextBtn) nextBtn.disabled = !isQuestionComplete(q, state.answers);
+        },
         updatePreview: () => {
           if (!features.pricing) return;
           const pr2 = sumPricing(cfg, qmap, state);
@@ -988,7 +1348,9 @@
     
       // body
       if (q.type === "single_select") renderSingleSelect(q, content);
+      else if (q.type === "multi_select") renderMultiSelect(q, content);
       else if (q.type === "form") renderForm(q, content, ui);
+      else if (q.type === "result") renderResult(q, content);
       else if (q.type === "summary") content.appendChild(mk("div", { class: "note" }, ["Review your answers, then continue."]));
       else if (q.type === "submit") content.appendChild(mk("div", { class: "note" }, [q.note || "Submit when you are ready."]));
       else if (q.type === "content") content.appendChild(mk("div", { class: "contentBlock", html: q.html || "" }));
@@ -1002,7 +1364,7 @@
         renderQuestionImage(q)
       ]);
 
-      const step = mk("div", { class: `quiz_changable-content quiz-step-${q.type}` }, [
+      const step = mk("div", { class: `quiz_changable-content quiz-step-${q.type}${isNewStep ? " is-entering" : ""}` }, [
         questionHeader,
         content,
         submitMessage,
@@ -1017,6 +1379,7 @@
         ])
       ]);
       mount.appendChild(container);
+      lastRenderedStepId = q.id;
     }
 
 

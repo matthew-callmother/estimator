@@ -10,3 +10,4 @@
 - Add service-area management beyond config-based ZIP lists.
 - Add generic non-pricing result screens for quizzes that do not produce estimates.
 - Keep ServiceTitan lead summaries in reusable plain-text sections as modules append data.
+- Add quiz-generator validation for scored result configs, including required `tie_priority` and `tie_breaker_reason` on every result.

@@ -18,27 +18,41 @@
   "questions": [
     {
       "id": "priority",
-      "type": "single_select",
+      "type": "multi_select",
       "title": "What's most important to you?",
-      "subtitle": "Choose the answer that matters most.",
+      "subtitle": "Choose up to 2 answers that matter most.",
+      "min_selected": 1,
+      "max_selected": 2,
       "image_url": "https://cdn.prod.website-files.com/678144dfb4c536263e714199/699886303d4e775bbb86fe2a_Image%20Container.avif",
       "options": [
         {
           "value": "lower_upfront_cost",
           "label": "Lower upfront cost",
           "tooltip": "You want the simplest replacement with the lowest install cost.",
+          "scores": {
+            "standard_tank_fit": 2,
+            "tankless_fit": 0
+          },
           "next": "home_size"
         },
         {
           "value": "long_term_savings",
           "label": "Long-term savings",
           "tooltip": "You care more about efficiency and monthly utility costs.",
+          "scores": {
+            "standard_tank_fit": 0,
+            "tankless_fit": 2
+          },
           "next": "home_size"
         },
         {
           "value": "unlimited_hot_water",
           "label": "Unlimited hot water",
           "tooltip": "You want better performance for back-to-back showers or large households.",
+          "scores": {
+            "standard_tank_fit": 0,
+            "tankless_fit": 3
+          },
           "next": "home_size"
         }
       ]
@@ -52,16 +66,28 @@
         {
           "value": "one_two",
           "label": "1-2 people",
+          "scores": {
+            "standard_tank_fit": 1,
+            "tankless_fit": 0
+          },
           "next": "current_setup"
         },
         {
           "value": "three_four",
           "label": "3-4 people",
+          "scores": {
+            "standard_tank_fit": 0,
+            "tankless_fit": 1
+          },
           "next": "current_setup"
         },
         {
           "value": "five_plus",
           "label": "5+ people",
+          "scores": {
+            "standard_tank_fit": 0,
+            "tankless_fit": 2
+          },
           "next": "current_setup"
         }
       ]
@@ -71,21 +97,32 @@
       "type": "single_select",
       "title": "What do you currently have?",
       "subtitle": "No problem if you are not sure.",
+      "result_strategy": "highest_score",
+      "next": "$winning_result",
       "options": [
         {
           "value": "tank",
           "label": "Tank water heater",
-          "next": "zip_screen"
+          "scores": {
+            "standard_tank_fit": 1,
+            "tankless_fit": 0
+          }
         },
         {
           "value": "tankless",
           "label": "Tankless water heater",
-          "next": "zip_screen"
+          "scores": {
+            "standard_tank_fit": 0,
+            "tankless_fit": 1
+          }
         },
         {
           "value": "not_sure",
           "label": "Not sure",
-          "next": "zip_screen"
+          "scores": {
+            "standard_tank_fit": 0,
+            "tankless_fit": 0
+          }
         }
       ]
     },
@@ -181,6 +218,26 @@
       "submit_label": "Submit Quiz",
       "pending_label": "Submitting...",
       "submit_on_next": true
+    }
+  ],
+  "results": [
+    {
+      "id": "tankless_fit",
+      "title": "Tankless may be a good fit",
+      "message": "Based on your answers, a tankless water heater may match your priorities. We can confirm fit, venting, and installation requirements after checking your service area.",
+      "tie_priority": 10,
+      "tie_breaker_reason": "Both could work, but we recommend tankless when long-term performance and unlimited hot water matter more than upfront cost.",
+      "next_label": "Check My Area",
+      "next": "zip_screen"
+    },
+    {
+      "id": "standard_tank_fit",
+      "title": "A standard tank may be the better fit",
+      "message": "Based on your answers, a standard tank water heater may be the simpler and more cost-effective option. We can confirm the best path after checking your service area.",
+      "tie_priority": 20,
+      "tie_breaker_reason": "Both could work, but we recommend a standard tank because your answers are evenly split and the conventional option usually has the lower upfront cost.",
+      "next_label": "Check My Area",
+      "next": "zip_screen"
     }
   ],
   "result_copy": {

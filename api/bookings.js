@@ -184,7 +184,7 @@ function buildSummary(form, submittedAt) {
       form.exactTotal !== undefined ? `Exact total: $${form.exactTotal}` : null
     ]),
     summarySection("Permit", formatPermit(form.permit)),
-    summarySection("Recommendation", formatRecommendation(form.recommendation)),
+    summarySection("Recommendation", formatRecommendation(form.recommendation || form.selectedResult)),
     summarySection("Page / Tracking", [
       form.pageUrl ? `Page URL: ${form.pageUrl}` : null,
       form.submittedAt ? `Browser submitted at: ${form.submittedAt}` : null,
@@ -232,6 +232,15 @@ function formatRecommendation(recommendation) {
   if (typeof recommendation === "string") return [recommendation];
   if (Array.isArray(recommendation)) return recommendation.map(formatSummaryValue);
   if (typeof recommendation === "object") {
+    if (recommendation.title || recommendation.message || recommendation.id) {
+      return [
+        recommendation.title ? `Result: ${recommendation.title}` : null,
+        recommendation.id ? `Result ID: ${recommendation.id}` : null,
+        recommendation.isTie ? `Tie detected: ${formatSummaryValue(recommendation.tiedResultIds || [])}` : null,
+        recommendation.tieBreakerReason ? `Tie-breaker reason: ${recommendation.tieBreakerReason}` : null,
+        recommendation.message ? `Message: ${recommendation.message}` : null
+      ].filter(Boolean);
+    }
     return Object.entries(recommendation).map(([key, value]) => `${key}: ${formatSummaryValue(value)}`);
   }
   return [formatSummaryValue(recommendation)];

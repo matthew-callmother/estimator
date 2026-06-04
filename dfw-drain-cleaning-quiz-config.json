@@ -1,0 +1,456 @@
+{
+  "meta": {
+    "estimatorId": "dfw-drain-cleaning-quiz",
+    "serviceName": "DFW drain cleaning quiz",
+    "version": "drain-cleaning-v1"
+  },
+  "estimatorId": "dfw-drain-cleaning-quiz",
+  "quizName": "Find Your Best Clog Removal Option",
+  "serviceName": "DFW drain cleaning quiz",
+  "defaultCountry": "United States",
+  "campaign": "DFW Drain Cleaning Quiz",
+  "features": {
+    "pricing": false,
+    "permitLookup": false,
+    "serviceAreaFilter": true,
+    "serviceTitanBooking": true,
+    "recommendations": false
+  },
+  "start": "clog_location",
+  "questions": [
+    {
+      "id": "clog_location",
+      "type": "single_select",
+      "title": "Let's start simple: where's your drain problem?",
+      "subtitle": "We'll find your ideal drain cleaning solution in 60 seconds.",
+      "options": [
+        {
+          "value": "kitchen_sink_only",
+          "label": "Kitchen sink only",
+          "scores": {
+            "drain_cleaning_fit": 3,
+            "hydro_jetting_fit": 0,
+            "chain_knocking_fit": 0
+          },
+          "next": "symptoms"
+        },
+        {
+          "value": "one_bathroom_one_fixture",
+          "label": "One bathroom, one fixture",
+          "scores": {
+            "drain_cleaning_fit": 3,
+            "hydro_jetting_fit": 0,
+            "chain_knocking_fit": 0
+          },
+          "next": "symptoms"
+        },
+        {
+          "value": "one_bathroom_multiple_fixtures",
+          "label": "One bathroom, multiple fixtures",
+          "scores": {
+            "drain_cleaning_fit": 0,
+            "hydro_jetting_fit": 3,
+            "chain_knocking_fit": 1
+          },
+          "next": "symptoms"
+        },
+        {
+          "value": "multiple_bathrooms",
+          "label": "Multiple bathrooms",
+          "scores": {
+            "drain_cleaning_fit": 0,
+            "hydro_jetting_fit": 3,
+            "chain_knocking_fit": 2
+          },
+          "next": "symptoms"
+        },
+        {
+          "value": "all_drains_clogged",
+          "label": "All my drains are clogged",
+          "scores": {
+            "drain_cleaning_fit": 0,
+            "hydro_jetting_fit": 3,
+            "chain_knocking_fit": 2
+          },
+          "next": "symptoms"
+        }
+      ]
+    },
+    {
+      "id": "symptoms",
+      "type": "multi_select",
+      "title": "What symptoms are you noticing?",
+      "subtitle": "Check all answers that apply.",
+      "min_selected": 1,
+      "options": [
+        {
+          "value": "slow_drains",
+          "label": "Slow drains",
+          "scores": {
+            "drain_cleaning_fit": 1,
+            "hydro_jetting_fit": 1,
+            "chain_knocking_fit": 0
+          }
+        },
+        {
+          "value": "water_backing_up_into_drain",
+          "label": "Water backing up into drain",
+          "scores": {
+            "drain_cleaning_fit": 0,
+            "hydro_jetting_fit": 2,
+            "chain_knocking_fit": 1
+          }
+        },
+        {
+          "value": "smelly_drains",
+          "label": "Smelly drains",
+          "scores": {
+            "drain_cleaning_fit": 1,
+            "hydro_jetting_fit": 1,
+            "chain_knocking_fit": 0
+          }
+        },
+        {
+          "value": "gurgling_noises_from_pipes",
+          "label": "Gurgling noises from pipes",
+          "scores": {
+            "drain_cleaning_fit": 0,
+            "hydro_jetting_fit": 2,
+            "chain_knocking_fit": 1
+          }
+        },
+        {
+          "value": "toilet_backing_up_into_shower",
+          "label": "Toilet backing up into the shower",
+          "scores": {
+            "drain_cleaning_fit": 0,
+            "hydro_jetting_fit": 3,
+            "chain_knocking_fit": 2
+          }
+        },
+        {
+          "value": "recurring_clogs_and_backups",
+          "label": "Recurring clogs and backups",
+          "scores": {
+            "drain_cleaning_fit": 0,
+            "hydro_jetting_fit": 2,
+            "chain_knocking_fit": 2
+          }
+        },
+        {
+          "value": "whole_house_backing_up",
+          "label": "Whole house is backing up",
+          "scores": {
+            "drain_cleaning_fit": 0,
+            "hydro_jetting_fit": 3,
+            "chain_knocking_fit": 2
+          }
+        }
+      ],
+      "next": "attempted_fixes"
+    },
+    {
+      "id": "attempted_fixes",
+      "type": "multi_select",
+      "title": "What have you tried that hasn't worked?",
+      "subtitle": "Check all answers that apply.",
+      "min_selected": 1,
+      "options": [
+        {
+          "value": "drano",
+          "label": "Drano",
+          "scores": {
+            "drain_cleaning_fit": 1,
+            "hydro_jetting_fit": 0,
+            "chain_knocking_fit": 0
+          }
+        },
+        {
+          "value": "bacterial_or_enzyme_drain_cleaner",
+          "label": "Bacterial or enzyme drain cleaner",
+          "scores": {
+            "drain_cleaning_fit": 1,
+            "hydro_jetting_fit": 0,
+            "chain_knocking_fit": 0
+          }
+        },
+        {
+          "value": "hardware_store_drain_snake",
+          "label": "Hardware store drain snake",
+          "scores": {
+            "drain_cleaning_fit": 0,
+            "hydro_jetting_fit": 2,
+            "chain_knocking_fit": 1
+          }
+        },
+        {
+          "value": "another_plumber_couldnt_fix_it",
+          "label": "Another plumber couldn't fix it",
+          "scores": {
+            "drain_cleaning_fit": 0,
+            "hydro_jetting_fit": 2,
+            "chain_knocking_fit": 2
+          }
+        },
+        {
+          "value": "havent_tried_anything_yet",
+          "label": "I haven't tried anything yet",
+          "scores": {
+            "drain_cleaning_fit": 1,
+            "hydro_jetting_fit": 0,
+            "chain_knocking_fit": 0
+          }
+        }
+      ],
+      "next": "pipe_material"
+    },
+    {
+      "id": "pipe_material",
+      "type": "single_select",
+      "title": "What are your existing sewer pipes made of?",
+      "subtitle": "Choose the answer that applies to most of your pipe materials.",
+      "options": [
+        {
+          "value": "pvc_or_schedule_40_pvc",
+          "label": "PVC or Schedule 40 PVC",
+          "scores": {
+            "drain_cleaning_fit": 0,
+            "hydro_jetting_fit": 3,
+            "chain_knocking_fit": 0
+          },
+          "next": "service_need"
+        },
+        {
+          "value": "cast_iron",
+          "label": "Cast iron",
+          "scores": {
+            "drain_cleaning_fit": 0,
+            "hydro_jetting_fit": 0,
+            "chain_knocking_fit": 3
+          },
+          "next": "service_need"
+        },
+        {
+          "value": "clay",
+          "label": "Clay",
+          "scores": {
+            "drain_cleaning_fit": 0,
+            "hydro_jetting_fit": 0,
+            "chain_knocking_fit": 3
+          },
+          "next": "service_need"
+        },
+        {
+          "value": "orangeburg",
+          "label": "Orangeburg",
+          "scores": {
+            "drain_cleaning_fit": 0,
+            "hydro_jetting_fit": 0,
+            "chain_knocking_fit": 4
+          },
+          "next": "service_need"
+        },
+        {
+          "value": "not_sure",
+          "label": "I'm not sure",
+          "scores": {
+            "drain_cleaning_fit": 0,
+            "hydro_jetting_fit": 0,
+            "chain_knocking_fit": 0
+          },
+          "next": "service_need"
+        }
+      ]
+    },
+    {
+      "id": "service_need",
+      "type": "single_select",
+      "title": "How can a licensed plumber best serve your needs?",
+      "subtitle": "Choose what matters most for your visit.",
+      "result_strategy": "highest_score",
+      "next": "result_gate",
+      "options": [
+        {
+          "value": "fixed_today",
+          "label": "I need this fixed today",
+          "scores": {
+            "drain_cleaning_fit": 0,
+            "hydro_jetting_fit": 0,
+            "chain_knocking_fit": 0
+          }
+        },
+        {
+          "value": "meet_my_schedule",
+          "label": "I'm constantly traveling - meet my schedule",
+          "scores": {
+            "drain_cleaning_fit": 0,
+            "hydro_jetting_fit": 0,
+            "chain_knocking_fit": 0
+          }
+        },
+        {
+          "value": "done_in_one_trip",
+          "label": "I'm flexible, but I want it done in one trip",
+          "scores": {
+            "drain_cleaning_fit": 0,
+            "hydro_jetting_fit": 0,
+            "chain_knocking_fit": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "result_gate",
+      "type": "form",
+      "title": "Where should we send your result?",
+      "subtitle": "Enter your name, email, and ZIP code to see your recommendation.",
+      "result_gate": true,
+      "fields": [
+        {
+          "id": "contact_name",
+          "label": "Name",
+          "input_type": "text",
+          "required": true,
+          "placeholder": "Full name",
+          "autocomplete": "name"
+        },
+        {
+          "id": "contact_email",
+          "label": "Email",
+          "input_type": "email",
+          "required": true,
+          "type": "email",
+          "placeholder": "you@email.com",
+          "autocomplete": "email"
+        },
+        {
+          "id": "addr_zip",
+          "label": "ZIP code",
+          "input_type": "text",
+          "required": true,
+          "placeholder": "75034",
+          "autocomplete": "postal-code",
+          "pattern": "^\\d{5}(-\\d{4})?$",
+          "pattern_msg": "Use a 5-digit ZIP"
+        }
+      ],
+      "next_label": "See My Result",
+      "next": "$winning_result"
+    },
+    {
+      "id": "booking_capture",
+      "type": "form",
+      "title": "Want help with this?",
+      "subtitle": "You're in our service area. Share your phone and service address so we can follow up.",
+      "fields": [
+        {
+          "id": "contact_phone",
+          "label": "Phone",
+          "input_type": "tel",
+          "required": true,
+          "type": "phone",
+          "min_digits": 10,
+          "placeholder": "(555) 555-5555",
+          "autocomplete": "tel"
+        },
+        {
+          "id": "addr_street",
+          "label": "Street",
+          "input_type": "text",
+          "required": true,
+          "placeholder": "123 Main St",
+          "autocomplete": "street-address"
+        },
+        {
+          "id": "addr_unit",
+          "label": "Unit",
+          "input_type": "text",
+          "required": false,
+          "placeholder": "Apt, suite, etc.",
+          "autocomplete": "address-line2"
+        },
+        {
+          "id": "addr_city",
+          "label": "City",
+          "input_type": "text",
+          "required": true,
+          "placeholder": "Frisco",
+          "autocomplete": "address-level2"
+        },
+        {
+          "id": "addr_state",
+          "label": "State",
+          "input_type": "text",
+          "required": true,
+          "placeholder": "TX",
+          "autocomplete": "address-level1",
+          "pattern": "^[A-Za-z]{2}$",
+          "pattern_msg": "Use a 2-letter state code"
+        }
+      ],
+      "next_label": "Submit Quiz",
+      "submit_label": "Submit Quiz",
+      "pending_label": "Submitting...",
+      "submit_on_next": true
+    }
+  ],
+  "results": [
+    {
+      "id": "drain_cleaning_fit",
+      "title": "You Need Drain Cleaning Service",
+      "message": "A complete approach to drain cleaning is right for you. Based on your answers, you're experiencing targeted drain clogs that aren't widespread - that's good news. You're probably not dealing with a sewer backup.\n\nMother offers $299 drain cleaning service with no hidden fees or markups. We guarantee clear drains with a 120-day no clogs promise. Our service includes complete clearing, non-toxic drain cleaning products, a complimentary drain camera inspection, and a free bottle of enzyme drain cleaner for ongoing use.\n\nCall us 24/7 to schedule at (469) 206-9515.",
+      "tie_priority": 10,
+      "tie_breaker_reason": "Your answers are balanced, so we recommend drain cleaning first because the issue still appears targeted and this is the simplest starting point.",
+      "availability": {
+        "in_area": {
+          "message": "Mother serves your ZIP code and can help with this.",
+          "next_label": "Get Help With This",
+          "next": "booking_capture"
+        },
+        "out_of_area": {
+          "message": "Mother is not serving your ZIP code yet, so we cannot book this through our team right now.",
+          "advice": "Your result is still useful. If you call a local plumber, ask whether their drain cleaning includes a no-clog guarantee and whether they inspect the line after clearing it.",
+          "next": null
+        }
+      }
+    },
+    {
+      "id": "hydro_jetting_fit",
+      "title": "Hydro Jetting Is Right For You",
+      "message": "Multiple drain issues or backups among fixtures indicate your blockage is deeper than the drain pipe. That's why attempts to clear it may not have worked - you're not going crazy.\n\nMother's hydro jetting service is right for you. We use a complimentary camera inspection to find your clog and assess your pipe conditions, especially if you have cast iron. Then we use precision hydro jetting service to blast your blockage out of the pipe for good.\n\nIt's all backed by our 120-day no clogs guarantee. Call us 24/7 to schedule at (469) 206-9515.",
+      "tie_priority": 20,
+      "tie_breaker_reason": "Your answers are balanced, so we recommend hydro jetting when symptoms suggest the blockage may be deeper than a single fixture.",
+      "availability": {
+        "in_area": {
+          "message": "Mother serves your ZIP code and can help with this.",
+          "next_label": "Get Help With This",
+          "next": "booking_capture"
+        },
+        "out_of_area": {
+          "message": "Mother is not serving your ZIP code yet, so we cannot book this through our team right now.",
+          "advice": "Your result is still useful. If you call a local plumber, ask whether they include a camera inspection before hydro jetting and whether your pipe material is safe for jetting.",
+          "next": null
+        }
+      }
+    },
+    {
+      "id": "chain_knocking_fit",
+      "title": "Chain Knocking Is Your Best Option",
+      "message": "Your answers indicate a systemic blockage in your sewer pipes that affects multiple drains in your house. That's why the clogs keep coming back, often in different places. Your answers also suggest older sewer lines that may not withstand the power of hydro jetting equipment.\n\nChain knocking, also called sewer augering, is a great option for deteriorated sewer pipes, especially in DFW. After a complimentary camera inspection to assess your pipe condition, our technicians knock blockages loose from your main drain line without causing any further damage.\n\nIt's all backed by our 120-day no clogs guarantee. Call us 24/7 to schedule at (469) 206-9515.",
+      "tie_priority": 30,
+      "tie_breaker_reason": "Your answers are balanced, so we recommend chain knocking when older or more delicate pipe material may make hydro jetting less appropriate.",
+      "availability": {
+        "in_area": {
+          "message": "Mother serves your ZIP code and can help with this.",
+          "next_label": "Get Help With This",
+          "next": "booking_capture"
+        },
+        "out_of_area": {
+          "message": "Mother is not serving your ZIP code yet, so we cannot book this through our team right now.",
+          "advice": "Your result is still useful. If you call a local plumber, ask whether they can handle older cast iron, clay, or Orangeburg sewer lines without using equipment that could damage fragile pipe.",
+          "next": null
+        }
+      }
+    }
+  ]
+}
