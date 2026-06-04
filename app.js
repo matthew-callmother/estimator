@@ -520,9 +520,10 @@
   }
 
   function renderProgress(progress) {
+    const progressScale = Math.max(0, Math.min(1, progress.percent / 100));
     return mk("div", { class: "quiz_progress-wrap" }, [
       mk("div", { class: "quiz_form-progress", role: "progressbar", "aria-valuemin": 0, "aria-valuemax": 100, "aria-valuenow": progress.percent }, [
-        mk("div", { class: "quiz_form-progress-indicator", style: `width:${progress.percent}%` })
+        mk("div", { class: "quiz_form-progress-indicator", style: `transform:scaleX(${progressScale})` })
       ]),
       mk("div", { class: "quiz_progress-meta" }, [`Step ${progress.currentStep} of ${progress.total}`])
     ]);
