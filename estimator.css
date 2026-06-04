@@ -21,6 +21,8 @@
   --quiz-motion-medium: 240ms;
   --quiz-motion-slow: 320ms;
   --quiz-motion-ease: cubic-bezier(0.2, 0, 0, 1);
+  --quiz-card-width: 620px;
+  --quiz-inner-width: 490px;
 
   position: relative;
   isolation: isolate;
@@ -61,15 +63,17 @@
 
 #wh-estimator .quiz_form-component,
 #wh-estimator .card {
-  width: min(100%, 620px);
-  overflow: visible;
+  width: min(100%, var(--quiz-card-width));
+  max-height: calc(100svh - 48px);
+  overflow: hidden;
   border-radius: var(--quiz-radius);
   background: var(--quiz-card);
   box-shadow: var(--quiz-shadow);
 }
 
 #wh-estimator .quiz_form-component {
-  display: block;
+  display: grid;
+  height: min(760px, calc(100svh - 48px));
 }
 
 #wh-estimator .quiz_main-content,
@@ -80,7 +84,11 @@
 }
 
 #wh-estimator .quiz_main-content {
-  overflow: visible;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 #wh-estimator .stepHeader h2,
@@ -124,9 +132,10 @@
 #wh-estimator .progressWrap {
   display: grid;
   gap: 8px;
-  width: 100%;
+  width: min(100%, var(--quiz-inner-width));
   min-width: 0;
   align-self: stretch;
+  margin-inline: auto;
 }
 
 #wh-estimator .quiz_form-progress,
@@ -181,11 +190,17 @@
 }
 
 #wh-estimator .quiz_changable-content {
-  overflow: visible;
+  width: min(100%, var(--quiz-inner-width));
+  height: 100%;
+  min-height: 0;
+  margin-inline: auto;
+  overflow: hidden;
+  grid-template-rows: auto minmax(0, 1fr) auto auto auto;
 }
 
 #wh-estimator .quiz_step-content {
-  overflow: visible;
+  min-height: 0;
+  overflow: auto;
   padding-right: 0;
   scrollbar-color: var(--quiz-border-strong) var(--quiz-surface-strong);
   scrollbar-width: thin;
@@ -269,10 +284,10 @@
   display: grid;
   grid-template-columns: 1fr;
   gap: 10px;
-  max-height: min(430px, 48svh);
-  overflow: auto;
+  max-height: none;
+  overflow: visible;
   align-content: start;
-  padding-right: 4px;
+  padding-right: 0;
   scrollbar-color: var(--quiz-border-strong) var(--quiz-surface-strong);
   scrollbar-width: thin;
 }
@@ -523,18 +538,27 @@
 
 #wh-estimator .quiz_nav-actions,
 #wh-estimator .nav {
+  position: static !important;
+  inset: auto !important;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-top: 4px;
+  width: 100%;
   min-height: 49px;
+  margin-top: 0;
+  padding-top: 12px;
+  background: var(--quiz-card);
 }
 
 #wh-estimator .quiz_next-button,
 #wh-estimator .btn {
+  position: static !important;
+  inset: auto !important;
   appearance: none;
   min-height: 49px;
-  flex: 1 1 auto;
+  flex: 0 1 220px;
+  margin-left: auto;
   border: 0;
   border-radius: 999px;
   background: var(--quiz-accent);
@@ -573,6 +597,8 @@
 
 #wh-estimator .quiz_back-button,
 #wh-estimator .btn.secondary {
+  position: static !important;
+  inset: auto !important;
   appearance: none;
   min-height: 49px;
   flex: 0 0 auto;
@@ -606,6 +632,8 @@
 }
 
 #wh-estimator .quiz_start-over-button {
+  position: static !important;
+  inset: auto !important;
   appearance: none;
   min-height: 49px;
   flex: 0 0 auto;
@@ -900,6 +928,9 @@
   }
 
   #wh-estimator .quiz_changable-content {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
     grid-template-rows: none;
   }
 
