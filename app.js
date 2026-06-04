@@ -519,11 +519,14 @@
     return { completed, currentStep, total, percent };
   }
 
-  function renderProgress(progress) {
+  function renderProgress(progress, previousPercent) {
     const progressScale = Math.max(0, Math.min(1, progress.percent / 100));
+    const previousScale = Number.isFinite(previousPercent)
+      ? Math.max(0, Math.min(1, previousPercent / 100))
+      : progressScale;
     return mk("div", { class: "quiz_progress-wrap" }, [
       mk("div", { class: "quiz_form-progress", role: "progressbar", "aria-valuemin": 0, "aria-valuemax": 100, "aria-valuenow": progress.percent }, [
-        mk("div", { class: "quiz_form-progress-indicator", style: `transform:scaleX(${progressScale})` })
+        mk("div", { class: "quiz_form-progress-indicator", "data-progress-scale": progressScale, style: `transform:scaleX(${previousScale})` })
       ]),
       mk("div", { class: "quiz_progress-meta" }, [`Step ${progress.currentStep} of ${progress.total}`])
     ]);
@@ -672,6 +675,7 @@
 
     let renderQueued = false;
     let lastRenderedStepId = null;
+    let lastRenderedProgressPercent = null;
     const scheduleRender = () => {
       if (renderQueued) return;
       renderQueued = true;
@@ -680,6 +684,19 @@
         render();
       });
     };
+
+    function animateProgressBar(progress) {
+      const bar = mount.querySelector(".quiz_form-progress-indicator");
+      if (!bar) return;
+
+      const targetScale = bar.dataset.progressScale || String(Math.max(0, Math.min(1, progress.percent / 100)));
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          bar.style.transform = `scaleX(${targetScale})`;
+        });
+      });
+      lastRenderedProgressPercent = progress.percent;
+    }
 
     async function updateServiceAreaStatus() {
       const sharedServiceArea = await loadServiceAreaIfNeeded(features);
@@ -964,7 +981,7 @@
 
       const card = mk("div", { class: "quiz_form-component" }, [
         mk("div", { class: "quiz_main-content" }, [
-          renderProgress(progress),
+          renderProgress(progress, lastRenderedProgressPercent),
           mk("div", { class: "quiz_changable-content" }, [
             mk("div", { class: "loading" }, [
               mk("div", { class: "loadingInner" }, [
@@ -979,6 +996,7 @@
       ]);
 
       mount.appendChild(card);
+      animateProgressBar(progress);
 
       const tick = () => {
         const el = document.getElementById(fillId);
@@ -1371,11 +1389,12 @@
 
       const container = mk("div", { class: "quiz_form-component" }, [
         mk("div", { class: "quiz_main-content" }, [
-          renderProgress(progress),
+          renderProgress(progress, lastRenderedProgressPercent),
           step
         ])
       ]);
       mount.appendChild(container);
+      animateProgressBar(progress);
       lastRenderedStepId = q.id;
     }
 

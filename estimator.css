@@ -31,8 +31,7 @@
   min-height: 100svh;
   width: 100%;
   padding: clamp(24px, 5svh, 54px) 18px 32px;
-  overflow: hidden;
-  overflow: clip;
+  overflow: visible;
   color: var(--quiz-text);
   background: var(--quiz-bg);
   font-family: var(--quiz-font);
@@ -63,19 +62,14 @@
 #wh-estimator .quiz_form-component,
 #wh-estimator .card {
   width: min(100%, 620px);
-  max-height: calc(100vh - 48px);
-  max-height: calc(100svh - 48px);
-  overflow: auto;
+  overflow: visible;
   border-radius: var(--quiz-radius);
   background: var(--quiz-card);
   box-shadow: var(--quiz-shadow);
-  scrollbar-gutter: stable;
 }
 
 #wh-estimator .quiz_form-component {
-  height: min(760px, calc(100svh - 48px));
-  display: grid;
-  overflow: hidden;
+  display: block;
 }
 
 #wh-estimator .quiz_main-content,
@@ -86,10 +80,7 @@
 }
 
 #wh-estimator .quiz_main-content {
-  height: 100%;
-  min-height: 0;
-  grid-template-rows: auto minmax(0, 1fr);
-  overflow: hidden;
+  overflow: visible;
 }
 
 #wh-estimator .stepHeader h2,
@@ -133,18 +124,28 @@
 #wh-estimator .progressWrap {
   display: grid;
   gap: 8px;
+  width: 100%;
+  min-width: 0;
+  align-self: stretch;
 }
 
 #wh-estimator .quiz_form-progress,
 #wh-estimator .progressBar {
+  position: relative;
+  display: block;
   width: 100%;
+  min-width: 100%;
+  max-width: 100%;
   height: 5px;
   overflow: hidden;
   border-radius: 999px;
   background: var(--quiz-surface-strong);
+  contain: layout paint;
 }
 
 #wh-estimator .quiz_form-progress-indicator {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   border-radius: inherit;
@@ -180,23 +181,19 @@
 }
 
 #wh-estimator .quiz_changable-content {
-  height: 100%;
-  min-height: 0;
-  grid-template-rows: auto minmax(0, 1fr) auto auto auto;
-  overflow: hidden;
+  overflow: visible;
 }
 
 #wh-estimator .quiz_step-content {
-  min-height: 0;
-  overflow: auto;
-  padding-right: 4px;
+  overflow: visible;
+  padding-right: 0;
   scrollbar-color: var(--quiz-border-strong) var(--quiz-surface-strong);
   scrollbar-width: thin;
 }
 
 #wh-estimator .quiz_step-content--single_select,
 #wh-estimator .quiz_step-content--multi_select {
-  overflow: hidden;
+  overflow: visible;
   padding-right: 0;
 }
 
@@ -272,8 +269,7 @@
   display: grid;
   grid-template-columns: 1fr;
   gap: 10px;
-  min-height: 0;
-  max-height: 100%;
+  max-height: min(430px, 48svh);
   overflow: auto;
   align-content: start;
   padding-right: 4px;
