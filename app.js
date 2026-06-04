@@ -507,6 +507,11 @@
       return count + (isProgressCountedQuestion(getQuestion(qmap, id)) ? 1 : 0);
     }, 0);
 
+    if (q?.type === "result") {
+      const total = Math.max(completedHistory, 1);
+      return { completed: total, currentStep: total, total, percent: 100 };
+    }
+
     const completed = completedHistory;
     const remaining = longestCountedPathFrom(qmap, cfg, state.currentId);
 
