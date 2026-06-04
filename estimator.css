@@ -1,6 +1,6 @@
 /* ===================================================================
-   MOTHER ESTIMATOR STYLES  —  BUILD: 2026-06-04  v8-hardened
-   If you do not see "v8-hardened" at the top of the CSS your browser
+   MOTHER ESTIMATOR STYLES  —  BUILD: 2026-06-04  v10-specificity-fix
+   If you do not see "v10-specificity-fix" at the top of the CSS your browser
    loads in DevTools, the page is serving an OLD cached file.
    =================================================================== */
 
@@ -1124,4 +1124,47 @@
   #wh-estimator .quiz_start-over-button {
     transform: none !important;
   }
+}
+
+/* ===================================================================
+   OVERRIDE-PROOF FIXES (v10)
+   These target two issues caused by ANOTHER stylesheet on the page
+   (the original estimator.css / a Webflow style) loading after this
+   file. A later sheet wins ties at equal specificity, so these rules
+   are written at HIGHER specificity (id + multiple classes / element)
+   so they win regardless of source order.
+   =================================================================== */
+
+/* 1) Width clamp: an external rule constrains the selection step
+   (e.g. max-width: var(--quiz-inner-width)/480px), shrinking the
+   option cards. Force the step, the wrapper, and the cards to fill
+   the full content width. Specificity here is id + 2 classes, which
+   outranks `#wh-estimator .quiz_step-content--single_select`. */
+#wh-estimator .quiz_changable-content .quiz_step-content,
+#wh-estimator .quiz_changable-content .quiz_step-content--single_select,
+#wh-estimator .quiz_changable-content .quiz_step-content--multi_select,
+#wh-estimator .quiz_step-content--single_select .quiz-options-wrapper,
+#wh-estimator .quiz_step-content--multi_select .quiz-options-wrapper,
+#wh-estimator .quiz_step-content--single_select .quiz-option,
+#wh-estimator .quiz_step-content--multi_select .quiz-option {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  align-self: stretch !important;
+}
+
+/* 2) "Back" label not centered: an external rule overrides text-align.
+   Center via flexbox instead so the result does not depend on which
+   text-align declaration wins. Higher specificity (id + class + element
+   + class) plus a property the override does not touch. */
+#wh-estimator .quiz_nav-actions button.quiz_back-button,
+#wh-estimator .quiz_nav-actions .quiz_back-button,
+#wh-estimator .quiz_nav-actions button.quiz_next-button,
+#wh-estimator .quiz_nav-actions .quiz_next-button {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
 }
