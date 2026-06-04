@@ -1,44 +1,65 @@
-/* Mother water heater estimator */
+/* Mother water heater / drain estimator — styling refresh
+   Functionality untouched: every class + state hook the JS relies on is preserved.
+   Improvements: fixed mobile button blob, fixed form label/input gaps, real
+   checkbox vs radio indicators, removed dead vertical space, richer brand surface,
+   refined options, inputs, buttons, progress, results and motion. */
 
 #wh-estimator {
+  --quiz-navy: #15154a;
+  --quiz-navy-deep: #0c0c33;
   --quiz-bg: #15154a;
   --quiz-card: #ffffff;
-  --quiz-text: #050540;
-  --quiz-muted: #676a86;
-  --quiz-placeholder: #9a9db4;
-  --quiz-surface: #f7f8fb;
-  --quiz-surface-strong: #eef0f5;
-  --quiz-border: #d9dbe7;
-  --quiz-border-strong: #b9bccf;
+  --quiz-text: #0a0a3d;
+  --quiz-muted: #5f627f;
+  --quiz-placeholder: #a0a3ba;
+  --quiz-surface: #f6f7fb;
+  --quiz-surface-strong: #eceef5;
+  --quiz-border: #e2e4ee;
+  --quiz-border-strong: #c7cadb;
   --quiz-accent: #ef2b6b;
-  --quiz-accent-strong: #d91d5b;
-  --quiz-accent-soft: #f58bad;
-  --quiz-focus: rgba(239, 43, 107, 0.18);
-  --quiz-radius: 8px;
-  --quiz-shadow: 0 18px 48px rgba(5, 5, 64, 0.2);
-  --quiz-font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  --quiz-accent-strong: #d31a59;
+  --quiz-accent-soft: #fbb6cd;
+  --quiz-accent-tint: #fff4f8;
+  --quiz-accent-grad: linear-gradient(180deg, #f53d77 0%, #ef2b6b 55%, #df1f60 100%);
+  --quiz-focus: rgba(239, 43, 107, 0.22);
+  --quiz-ring: rgba(239, 43, 107, 0.5);
+
+  --quiz-radius: 18px;
+  --quiz-radius-md: 13px;
+  --quiz-radius-sm: 11px;
+  --quiz-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.04),
+    0 24px 60px -18px rgba(6, 6, 48, 0.55),
+    0 8px 22px -12px rgba(6, 6, 48, 0.4);
+
+  --quiz-font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --quiz-display-font: var(--quiz-font);
+
   --quiz-motion-fast: 140ms;
   --quiz-motion-medium: 240ms;
-  --quiz-motion-slow: 320ms;
-  --quiz-motion-ease: cubic-bezier(0.2, 0, 0, 1);
-  --quiz-card-width: 620px;
-  --quiz-inner-width: 490px;
+  --quiz-motion-slow: 360ms;
+  --quiz-motion-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  --quiz-card-width: 600px;
+  --quiz-inner-width: 480px;
 
   position: relative;
   isolation: isolate;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   min-height: 100vh;
   min-height: 100svh;
   width: 100%;
-  padding: clamp(24px, 5svh, 54px) 18px 32px;
+  padding: clamp(20px, 5svh, 56px) 18px clamp(24px, 5svh, 56px);
   overflow: visible;
   color: var(--quiz-text);
-  background: var(--quiz-bg);
+  background: var(--quiz-navy-deep);
   font-family: var(--quiz-font);
   font-size: 16px;
-  line-height: 1.4;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 #wh-estimator,
@@ -53,71 +74,104 @@
   font-family: inherit;
 }
 
+/* Background photo + brand wash so the surface reads intentional even if the
+   image is slow or unavailable. */
 #wh-estimator::before {
   content: "";
   position: absolute;
   inset: 0;
   z-index: -2;
-  background: url("https://cdn.prod.website-files.com/678144dfb4c536263e714199/699885f29abad94e6c908479_123.webp") center / cover no-repeat;
+  background:
+    url("https://cdn.prod.website-files.com/678144dfb4c536263e714199/699885f29abad94e6c908479_123.webp") center / cover no-repeat,
+    var(--quiz-navy);
 }
 
+#wh-estimator::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(239, 43, 107, 0.16), transparent 60%),
+    linear-gradient(180deg, rgba(12, 12, 51, 0.55) 0%, rgba(12, 12, 51, 0.78) 100%);
+}
+
+/* ---------------- Card ---------------- */
 #wh-estimator .quiz_form-component,
 #wh-estimator .card {
+  position: relative;
   width: min(100%, var(--quiz-card-width));
-  max-height: calc(100svh - 48px);
+  max-height: calc(100svh - 40px);
   overflow: hidden;
   border-radius: var(--quiz-radius);
   background: var(--quiz-card);
   box-shadow: var(--quiz-shadow);
 }
 
+/* Slim brand bar across the very top of the card. */
+#wh-estimator .quiz_form-component::before,
+#wh-estimator .card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  z-index: 3;
+  background: var(--quiz-accent-grad);
+}
+
+/* Height now hugs content (no more dead space on short steps) but still caps to
+   the viewport. The flex column lets the middle region scroll when content is
+   taller than the cap, instead of clipping. */
 #wh-estimator .quiz_form-component {
-  display: grid;
-  height: min(760px, calc(100svh - 48px));
+  display: flex;
+  flex-direction: column;
+  height: auto;
 }
 
 #wh-estimator .quiz_main-content,
 #wh-estimator .card {
-  display: grid;
-  gap: 18px;
-  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: clamp(24px, 3.4vw, 34px);
 }
 
 #wh-estimator .quiz_main-content {
   width: 100%;
-  height: 100%;
+  flex: 1 1 auto;
   min-height: 0;
-  overflow: hidden;
-  grid-template-rows: auto minmax(0, 1fr);
 }
 
+/* ---------------- Headings ---------------- */
 #wh-estimator .stepHeader h2,
-#wh-estimator .text-size-20px,
 #wh-estimator .quiz_question-title {
   margin: 0;
   color: var(--quiz-text);
-  font-size: clamp(22px, 3vw, 25px);
+  font-family: var(--quiz-display-font);
+  font-size: clamp(22px, 3vw, 26px);
   font-weight: 800;
-  letter-spacing: 0;
-  line-height: 1.12;
+  letter-spacing: -0.02em;
+  line-height: 1.14;
+  text-wrap: balance;
 }
 
 #wh-estimator .stepSub,
-#wh-estimator .text-size-16px,
 #wh-estimator .quiz_question-subtitle {
   margin: 0;
-  color: var(--quiz-text);
+  color: var(--quiz-muted);
   font-size: 15px;
   font-weight: 500;
-  line-height: 1.35;
+  line-height: 1.45;
 }
 
 #wh-estimator .quiz_question-image-wrapper {
   width: 100%;
   height: clamp(140px, 22svh, 190px);
-  margin-top: 8px;
+  margin-top: 4px;
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: var(--quiz-radius-md);
   background: var(--quiz-surface-strong);
 }
 
@@ -128,14 +182,14 @@
   object-fit: cover;
 }
 
+/* ---------------- Progress ---------------- */
 #wh-estimator .quiz_progress-wrap,
 #wh-estimator .progressWrap {
   display: grid;
-  gap: 8px;
-  width: min(100%, var(--quiz-inner-width));
+  gap: 9px;
+  width: 100%;
   min-width: 0;
   align-self: stretch;
-  margin-inline: auto;
 }
 
 #wh-estimator .quiz_form-progress,
@@ -145,7 +199,7 @@
   width: 100%;
   min-width: 100%;
   max-width: 100%;
-  height: 5px;
+  height: 6px;
   overflow: hidden;
   border-radius: 999px;
   background: var(--quiz-surface-strong);
@@ -158,7 +212,8 @@
   width: 100%;
   height: 100%;
   border-radius: inherit;
-  background: var(--quiz-accent);
+  background: var(--quiz-accent-grad);
+  box-shadow: 0 0 12px -2px var(--quiz-ring);
   transform-origin: left center;
   transform: scaleX(0);
   transition: transform var(--quiz-motion-slow) var(--quiz-motion-ease);
@@ -168,7 +223,7 @@
 #wh-estimator .progressFill {
   height: 100%;
   border-radius: inherit;
-  background: var(--quiz-accent);
+  background: var(--quiz-accent-grad);
   transition: width var(--quiz-motion-slow) var(--quiz-motion-ease);
   will-change: width;
 }
@@ -176,46 +231,51 @@
 #wh-estimator .quiz_progress-meta,
 #wh-estimator .progressMeta {
   color: var(--quiz-muted);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
   line-height: 1.2;
 }
 
+/* ---------------- Step body layout ---------------- */
 #wh-estimator .quiz_changable-content,
 #wh-estimator .quiz_step-content,
 #wh-estimator .quiz-question-content,
 #wh-estimator .card > #step-content {
-  display: grid;
-  gap: 14px;
+  display: flex;
+  flex-direction: column;
 }
 
 #wh-estimator .quiz_changable-content {
-  width: min(100%, var(--quiz-inner-width));
-  height: 100%;
+  width: 100%;
+  flex: 1 1 auto;
   min-height: 0;
-  margin-inline: auto;
-  overflow: hidden;
-  grid-template-rows: auto minmax(0, 1fr) auto auto auto;
-}
-
-#wh-estimator .quiz_step-content {
-  min-height: 0;
-  overflow: auto;
-  padding-right: 0;
-  scrollbar-color: var(--quiz-border-strong) var(--quiz-surface-strong);
-  scrollbar-width: thin;
-}
-
-#wh-estimator .quiz_step-content--single_select,
-#wh-estimator .quiz_step-content--multi_select {
-  overflow: visible;
-  padding-right: 0;
+  gap: 18px;
 }
 
 #wh-estimator .quiz-question-content {
-  gap: 12px;
+  flex: 0 0 auto;
+  gap: 9px;
 }
 
+#wh-estimator .quiz_step-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 14px;
+  overflow: auto;
+  scrollbar-color: var(--quiz-border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+/* Selection steps shouldn't introduce their own scroll container; the card caps
+   height and the inner region handles overflow. */
+#wh-estimator .quiz_step-content--single_select,
+#wh-estimator .quiz_step-content--multi_select {
+  overflow: visible;
+}
+
+/* ---------------- Step + item entrance motion ---------------- */
 #wh-estimator .quiz_changable-content.is-entering {
   animation: wh-step-enter var(--quiz-motion-medium) var(--quiz-motion-ease) both;
 }
@@ -228,15 +288,15 @@
 }
 
 #wh-estimator .quiz_changable-content.is-entering .quiz_step-content {
-  animation-delay: 45ms;
+  animation-delay: 50ms;
 }
 
 #wh-estimator .quiz_changable-content.is-entering .quiz_price-preview {
-  animation-delay: 70ms;
+  animation-delay: 80ms;
 }
 
 #wh-estimator .quiz_changable-content.is-entering .quiz_nav-actions {
-  animation-delay: 90ms;
+  animation-delay: 105ms;
 }
 
 #wh-estimator .quiz_heading-tooltip-icon-wrapper {
@@ -246,9 +306,10 @@
   gap: 12px;
 }
 
+/* ---------------- Legacy text utilities (kept) ---------------- */
 #wh-estimator .text-size-20px {
   font-size: 20px;
-  line-height: 1.15;
+  line-height: 1.18;
 }
 
 #wh-estimator .text-size-16px {
@@ -258,7 +319,7 @@
 #wh-estimator .text-size-14px {
   color: var(--quiz-muted);
   font-size: 14px;
-  line-height: 1.35;
+  line-height: 1.4;
 }
 
 #wh-estimator .text-weight-bold {
@@ -277,6 +338,7 @@
   opacity: 1;
 }
 
+/* ---------------- Options ---------------- */
 #wh-estimator .quiz-options-wrapper,
 #wh-estimator .quiz-options-wrapper.has-images,
 #wh-estimator .choicesList,
@@ -287,9 +349,6 @@
   max-height: none;
   overflow: visible;
   align-content: start;
-  padding-right: 0;
-  scrollbar-color: var(--quiz-border-strong) var(--quiz-surface-strong);
-  scrollbar-width: thin;
 }
 
 #wh-estimator .quiz_step-content::-webkit-scrollbar,
@@ -304,16 +363,17 @@
 #wh-estimator .choicesList::-webkit-scrollbar-track,
 #wh-estimator .choicesGrid::-webkit-scrollbar-track {
   border-radius: 20px;
-  background: var(--quiz-surface-strong);
+  background: transparent;
 }
 
 #wh-estimator .quiz_step-content::-webkit-scrollbar-thumb,
 #wh-estimator .quiz-options-wrapper::-webkit-scrollbar-thumb,
 #wh-estimator .choicesList::-webkit-scrollbar-thumb,
 #wh-estimator .choicesGrid::-webkit-scrollbar-thumb {
-  border: 3px solid var(--quiz-surface-strong);
+  border: 3px solid transparent;
   border-radius: 20px;
   background: var(--quiz-border-strong);
+  background-clip: padding-box;
 }
 
 #wh-estimator .quiz-option,
@@ -321,11 +381,11 @@
   position: relative;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid var(--quiz-border);
-  border-radius: 8px;
-  background: #ffffff;
+  border: 1.5px solid var(--quiz-border);
+  border-radius: var(--quiz-radius-md);
+  background: var(--quiz-card);
   cursor: pointer;
-  transform: translateY(0) scale(1);
+  transform: translateY(0);
   transition:
     transform var(--quiz-motion-fast) var(--quiz-motion-ease),
     border-color var(--quiz-motion-fast) ease,
@@ -339,6 +399,7 @@
   border-color: var(--quiz-border-strong);
   background: var(--quiz-surface);
   transform: translateY(-1px);
+  box-shadow: 0 6px 16px -10px rgba(6, 6, 48, 0.4);
 }
 
 #wh-estimator .quiz-option:active,
@@ -349,7 +410,7 @@
 #wh-estimator .quiz-option.is-input-active,
 #wh-estimator .choice.active {
   border-color: var(--quiz-accent);
-  background: #fff8fb;
+  background: var(--quiz-accent-tint);
   box-shadow: inset 0 0 0 1px var(--quiz-accent);
   animation: wh-choice-select var(--quiz-motion-medium) var(--quiz-motion-ease) both;
 }
@@ -370,12 +431,12 @@
 #wh-estimator .quiz-checkbox,
 #wh-estimator .choiceMain {
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) auto;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  min-height: 54px;
+  gap: 14px;
+  min-height: 58px;
   width: 100%;
-  padding: 10px 14px;
+  padding: 13px 16px;
   cursor: pointer;
 }
 
@@ -392,42 +453,75 @@
   padding: 0;
 }
 
+/* Default indicator = radio (circle). */
 #wh-estimator .wh_choice-radio-button,
 #wh-estimator .quiz_radio-button,
 #wh-estimator .quiz_checkbox-button {
-  width: 18px;
-  height: 18px;
+  position: relative;
+  width: 22px;
+  height: 22px;
+  flex: initial;
+  margin: 0;
+  top: auto;
+  left: auto;
   border: 2px solid var(--quiz-border-strong);
   border-radius: 999px;
   background: #ffffff;
-  position: relative;
-  top: auto;
-  left: auto;
-  flex: initial;
-  margin: 0;
-  transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+  transition: border-color var(--quiz-motion-fast) ease, background var(--quiz-motion-fast) ease, box-shadow var(--quiz-motion-fast) ease;
 }
 
 #wh-estimator .quiz_checkbox-button {
-  border-radius: 4px;
+  border-radius: 7px;
 }
 
+/* Multi-select renders <input type="checkbox">; turn its indicator into a square
+   so "check all that apply" reads correctly (no JS change required). */
+#wh-estimator .wh_choice-native-radio[type="checkbox"] + .wh_choice-radio-button {
+  border-radius: 7px;
+}
+
+/* Selected radio: filled dot. */
 #wh-estimator .quiz-option.is-input-active .wh_choice-radio-button,
 #wh-estimator .quiz-option.is-input-active .quiz_radio-button,
-#wh-estimator .quiz-option.is-input-active .quiz_checkbox-button {
+#wh-estimator .quiz-option.is-input-active .quiz_checkbox-button,
+#wh-estimator .choice.active .wh_choice-radio-button {
   border-color: var(--quiz-accent);
   background: #ffffff;
-  box-shadow: inset 0 0 0 4px #ffffff;
 }
 
 #wh-estimator .quiz-option.is-input-active .wh_choice-radio-button::after,
 #wh-estimator .quiz-option.is-input-active .quiz_radio-button::after,
-#wh-estimator .quiz-option.is-input-active .quiz_checkbox-button::after {
+#wh-estimator .choice.active .wh_choice-radio-button::after {
   content: "";
   position: absolute;
-  inset: 3px;
+  inset: 4px;
   border-radius: inherit;
   background: var(--quiz-accent);
+  animation: wh-choice-dot-radio var(--quiz-motion-fast) var(--quiz-motion-ease) both;
+}
+
+/* Selected checkbox: solid accent fill + white check (overrides the dot). */
+#wh-estimator .quiz-option.is-input-active .wh_choice-native-radio[type="checkbox"] + .wh_choice-radio-button,
+#wh-estimator .choice.active .wh_choice-native-radio[type="checkbox"] + .wh_choice-radio-button {
+  background: var(--quiz-accent);
+  border-color: var(--quiz-accent);
+}
+
+#wh-estimator .quiz-option.is-input-active .wh_choice-native-radio[type="checkbox"] + .wh_choice-radio-button::after,
+#wh-estimator .choice.active .wh_choice-native-radio[type="checkbox"] + .wh_choice-radio-button::after {
+  content: "";
+  position: absolute;
+  inset: auto;
+  border-radius: 0;
+  /* Checkmark drawn with a rotated border. */
+  top: 3px;
+  left: 7px;
+  width: 6px;
+  height: 11px;
+  background: none;
+  border: solid #ffffff;
+  border-width: 0 2.5px 2.5px 0;
+  transform: rotate(45deg);
   animation: wh-choice-dot var(--quiz-motion-fast) var(--quiz-motion-ease) both;
 }
 
@@ -440,7 +534,7 @@
 #wh-estimator .quiz_choose-option-content,
 #wh-estimator .choiceTop {
   display: grid;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
 }
 
@@ -448,24 +542,26 @@
 #wh-estimator .quiz_choose-option-content > :first-child,
 #wh-estimator .quiz_option-label {
   color: var(--quiz-text);
-  font-size: 15px;
+  font-size: 15.5px;
   font-weight: 700;
-  line-height: 1.25;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
 }
 
 #wh-estimator .quiz_choose-option-content > :nth-child(2),
 #wh-estimator .quiz_option-description {
   color: var(--quiz-muted);
   font-size: 13px;
-  line-height: 1.35;
+  font-weight: 500;
+  line-height: 1.4;
 }
 
 #wh-estimator .quiz_option-img-wrapper,
 #wh-estimator .oimg {
-  width: 72px;
-  height: 48px;
+  width: 76px;
+  height: 52px;
   overflow: hidden;
-  border-radius: 6px;
+  border-radius: 9px;
   background: var(--quiz-surface-strong);
 }
 
@@ -480,23 +576,34 @@
   height: 100%;
 }
 
+/* ---------------- Form fields ---------------- */
 #wh-estimator .form-field-wrapper,
 #wh-estimator .field {
   display: grid;
-  gap: 10px;
+  gap: 7px;
+  align-content: start; /* stops label/input rows from stretching apart */
 }
 
 #wh-estimator .form-field-wrapper {
   min-height: 0;
-  overflow: auto;
-  padding-right: 4px;
+}
+
+/* Separate one field group from the next without touching the JS DOM order
+   (label, input, error are flat siblings). */
+#wh-estimator .form-field-wrapper > .quiz_text-field:not(:first-child),
+#wh-estimator .field > .fieldLabel:not(:first-child) {
+  margin-top: 16px;
 }
 
 #wh-estimator .quiz_text-field,
 #wh-estimator .fieldLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   color: var(--quiz-text);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
 }
 
 #wh-estimator .quiz_text-input-field,
@@ -504,15 +611,23 @@
 #wh-estimator .field select,
 #wh-estimator .field textarea {
   width: 100%;
-  min-height: 48px;
-  border: 1px solid var(--quiz-border);
-  border-radius: 8px;
-  background: #ffffff;
+  min-height: 50px;
+  border: 1.5px solid var(--quiz-border);
+  border-radius: var(--quiz-radius-sm);
+  background: var(--quiz-surface);
   color: var(--quiz-text);
   font: inherit;
   font-size: 15px;
   outline: none;
-  padding: 12px 14px;
+  padding: 13px 15px;
+  transition: border-color var(--quiz-motion-fast) ease, background var(--quiz-motion-fast) ease, box-shadow var(--quiz-motion-fast) ease;
+}
+
+#wh-estimator .quiz_text-input-field:hover,
+#wh-estimator .field input:hover,
+#wh-estimator .field select:hover,
+#wh-estimator .field textarea:hover {
+  border-color: var(--quiz-border-strong);
 }
 
 #wh-estimator .quiz_text-input-field::placeholder,
@@ -527,15 +642,17 @@
 #wh-estimator .field select:focus,
 #wh-estimator .field textarea:focus {
   border-color: var(--quiz-accent);
+  background: #ffffff;
   box-shadow: 0 0 0 3px var(--quiz-focus);
 }
 
 #wh-estimator .fieldErr {
-  color: #b4234b;
+  color: var(--quiz-accent-strong);
   font-size: 12px;
   font-weight: 600;
 }
 
+/* ---------------- Nav + buttons ---------------- */
 #wh-estimator .quiz_nav-actions,
 #wh-estimator .nav {
   position: static !important;
@@ -543,11 +660,13 @@
   z-index: 2;
   display: flex;
   align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 10px 12px;
   width: 100%;
-  min-height: 49px;
-  margin-top: 0;
-  padding-top: 12px;
+  flex: 0 0 auto;
+  margin-top: 4px;
+  padding-top: 16px;
+  border-top: 1px solid var(--quiz-border);
   background: var(--quiz-card);
 }
 
@@ -556,41 +675,47 @@
   position: static !important;
   inset: auto !important;
   appearance: none;
-  min-height: 49px;
-  flex: 0 1 220px;
+  min-height: 52px;
+  flex: 0 1 230px;
   margin-left: auto;
   border: 0;
   border-radius: 999px;
-  background: var(--quiz-accent);
+  background: var(--quiz-accent-grad);
   color: #ffffff;
   font: inherit;
   font-size: 16px;
   font-weight: 700;
+  letter-spacing: 0.01em;
   line-height: 1;
   cursor: pointer;
-  padding: 14px 22px;
+  padding: 15px 26px;
+  box-shadow: 0 10px 22px -10px rgba(239, 43, 107, 0.7);
   transform: translateY(0);
   transition:
     transform var(--quiz-motion-fast) var(--quiz-motion-ease),
+    box-shadow var(--quiz-motion-fast) ease,
     background var(--quiz-motion-fast) ease,
     opacity var(--quiz-motion-fast) ease;
 }
 
 #wh-estimator .quiz_next-button:hover,
 #wh-estimator .btn:hover {
-  background: var(--quiz-accent-strong);
+  background: linear-gradient(180deg, #ef2b6b 0%, #d31a59 100%);
+  box-shadow: 0 14px 26px -10px rgba(239, 43, 107, 0.75);
   transform: translateY(-1px);
 }
 
 #wh-estimator .quiz_next-button:active,
 #wh-estimator .btn:active {
   transform: translateY(0) scale(0.99);
+  box-shadow: 0 6px 14px -8px rgba(239, 43, 107, 0.7);
 }
 
 #wh-estimator .quiz_next-button:disabled,
 #wh-estimator .btn:disabled {
-  background: var(--quiz-accent-soft);
-  opacity: 0.55;
+  background: var(--quiz-surface-strong);
+  color: var(--quiz-placeholder);
+  box-shadow: none;
   cursor: not-allowed;
   transform: none;
 }
@@ -600,9 +725,9 @@
   position: static !important;
   inset: auto !important;
   appearance: none;
-  min-height: 49px;
+  min-height: 52px;
   flex: 0 0 auto;
-  border: 1px solid var(--quiz-border);
+  border: 1.5px solid var(--quiz-border);
   border-radius: 999px;
   background: #ffffff;
   color: var(--quiz-text);
@@ -610,7 +735,7 @@
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
-  padding: 12px 22px;
+  padding: 13px 24px;
   transform: translateY(0);
   transition:
     transform var(--quiz-motion-fast) var(--quiz-motion-ease),
@@ -635,17 +760,17 @@
   position: static !important;
   inset: auto !important;
   appearance: none;
-  min-height: 49px;
+  min-height: 52px;
   flex: 0 0 auto;
   border: 1px solid transparent;
   border-radius: 999px;
   background: transparent;
   color: var(--quiz-muted);
   font: inherit;
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 700;
   cursor: pointer;
-  padding: 12px 16px;
+  padding: 12px 14px;
   transform: translateY(0);
   transition:
     transform var(--quiz-motion-fast) var(--quiz-motion-ease),
@@ -655,24 +780,24 @@
 }
 
 #wh-estimator .quiz_start-over-button:hover {
-  border-color: var(--quiz-border);
   background: var(--quiz-surface);
   color: var(--quiz-text);
-  transform: translateY(-1px);
 }
 
 #wh-estimator .quiz_start-over-button:active {
   transform: translateY(0) scale(0.99);
 }
 
+/* ---------------- Price preview ---------------- */
 #wh-estimator .quiz_price-preview,
 #wh-estimator .preview {
   display: grid;
   gap: 6px;
+  flex: 0 0 auto;
   border: 1px solid var(--quiz-border);
-  border-radius: 8px;
+  border-radius: var(--quiz-radius-md);
   background: var(--quiz-surface);
-  padding: 14px 16px;
+  padding: 15px 17px;
 }
 
 #wh-estimator .quiz_price-preview-top,
@@ -682,15 +807,19 @@
   justify-content: space-between;
   gap: 12px;
   color: var(--quiz-muted);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 #wh-estimator .quiz_price-preview-value,
 #wh-estimator .previewPrice {
   color: var(--quiz-text);
-  font-size: clamp(30px, 7vw, 36px);
+  font-family: var(--quiz-display-font);
+  font-size: clamp(30px, 7vw, 38px);
   font-weight: 800;
+  letter-spacing: -0.02em;
   line-height: 1;
 }
 
@@ -700,17 +829,19 @@
   font-size: 13px;
 }
 
+/* ---------------- Notes / content blocks ---------------- */
 #wh-estimator .note,
 #wh-estimator .contentBlock {
   border: 1px solid var(--quiz-border);
-  border-radius: 8px;
+  border-radius: var(--quiz-radius-md);
   background: var(--quiz-surface);
   color: var(--quiz-muted);
   font-size: 14px;
-  line-height: 1.45;
-  padding: 14px;
+  line-height: 1.5;
+  padding: 15px;
 }
 
+/* ---------------- Results ---------------- */
 #wh-estimator .quiz_result-content {
   display: grid;
   gap: 16px;
@@ -719,7 +850,7 @@
 #wh-estimator .quiz_result-message {
   color: var(--quiz-text);
   font-size: 16px;
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
 #wh-estimator .quiz_result-scores {
@@ -745,19 +876,21 @@
 }
 
 #wh-estimator .submitMessage.success {
-  border-color: rgba(36, 126, 83, 0.24);
-  background: rgba(36, 126, 83, 0.08);
-  color: #247e53;
+  border-color: rgba(31, 122, 80, 0.26);
+  background: rgba(31, 122, 80, 0.08);
+  color: #1f7a50;
 }
 
 #wh-estimator .submitMessage.error {
-  border-color: rgba(180, 35, 75, 0.24);
-  background: rgba(180, 35, 75, 0.08);
-  color: #b4234b;
+  border-color: rgba(211, 26, 89, 0.26);
+  background: rgba(211, 26, 89, 0.08);
+  color: var(--quiz-accent-strong);
 }
 
+/* ---------------- Loading ---------------- */
 #wh-estimator .loading {
   display: grid;
+  flex: 1 1 auto;
   min-height: 220px;
   place-items: center;
 }
@@ -765,34 +898,36 @@
 #wh-estimator .loadingInner {
   display: grid;
   justify-items: center;
-  gap: 14px;
+  gap: 15px;
   text-align: center;
 }
 
 #wh-estimator .spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid rgba(5, 5, 64, 0.14);
+  width: 42px;
+  height: 42px;
+  border: 3px solid rgba(10, 10, 61, 0.12);
   border-top-color: var(--quiz-accent);
   border-radius: 999px;
-  animation: wh-spin 900ms linear infinite;
+  animation: wh-spin 850ms linear infinite;
 }
 
 #wh-estimator .loadingTitle {
   color: var(--quiz-text);
-  font-size: 20px;
+  font-family: var(--quiz-display-font);
+  font-size: 21px;
   font-weight: 800;
+  letter-spacing: -0.01em;
 }
 
 #wh-estimator .loadingSub {
   color: var(--quiz-muted);
   font-size: 14px;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
 #wh-estimator .loadBar {
   width: min(320px, 70vw);
-  height: 5px;
+  height: 6px;
   overflow: hidden;
   border-radius: 999px;
   background: var(--quiz-surface-strong);
@@ -801,49 +936,53 @@
 #wh-estimator .loadFill {
   height: 100%;
   border-radius: inherit;
-  background: var(--quiz-accent);
+  background: var(--quiz-accent-grad);
 }
 
+/* ---------------- Tooltip ---------------- */
 #wh-estimator .tipWrap {
   position: relative;
   display: inline-flex;
 }
 
 #wh-estimator .tip {
-  width: 18px;
-  height: 18px;
+  width: 19px;
+  height: 19px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--quiz-border);
+  border: 1.5px solid var(--quiz-border-strong);
   border-radius: 999px;
   color: var(--quiz-muted);
   font-size: 12px;
   font-weight: 800;
   cursor: pointer;
+  transition: border-color var(--quiz-motion-fast) ease, color var(--quiz-motion-fast) ease;
 }
 
 #wh-estimator .tip:hover {
-  border-color: var(--quiz-border-strong);
-  color: var(--quiz-text);
+  border-color: var(--quiz-accent);
+  color: var(--quiz-accent);
 }
 
 #wh-estimator .tipBubble {
   position: absolute;
   z-index: 20;
-  top: 24px;
+  top: 26px;
   right: 0;
   width: min(280px, 72vw);
   border: 1px solid var(--quiz-border);
-  border-radius: 8px;
+  border-radius: var(--quiz-radius-sm);
   background: #ffffff;
-  box-shadow: 0 16px 36px rgba(5, 5, 64, 0.16);
+  box-shadow: 0 18px 40px rgba(6, 6, 48, 0.2);
   color: var(--quiz-text);
-  font-size: 12px;
-  line-height: 1.35;
-  padding: 10px;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.45;
+  padding: 12px 13px;
 }
 
+/* ---------------- Keyframes ---------------- */
 @keyframes wh-spin {
   to {
     transform: rotate(360deg);
@@ -853,7 +992,7 @@
 @keyframes wh-step-enter {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(10px);
   }
 
   to {
@@ -865,7 +1004,7 @@
 @keyframes wh-item-enter {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(7px);
   }
 
   to {
@@ -880,7 +1019,7 @@
   }
 
   45% {
-    transform: scale(1.01);
+    transform: scale(1.012);
   }
 
   100% {
@@ -889,6 +1028,18 @@
 }
 
 @keyframes wh-choice-dot {
+  from {
+    opacity: 0;
+    transform: scale(0.55) rotate(45deg);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(45deg);
+  }
+}
+
+@keyframes wh-choice-dot-radio {
   from {
     opacity: 0;
     transform: scale(0.55);
@@ -900,10 +1051,12 @@
   }
 }
 
+/* ---------------- Mobile ---------------- */
 @media (max-width: 700px) {
   #wh-estimator {
     min-height: auto;
-    padding: 18px 12px;
+    align-items: flex-start;
+    padding: 16px 12px 28px;
     overflow: visible;
   }
 
@@ -912,37 +1065,30 @@
     height: auto;
     max-height: none;
     overflow: visible;
-    scrollbar-gutter: auto;
   }
 
   #wh-estimator .quiz_main-content,
   #wh-estimator .card {
-    gap: 16px;
-    padding: 20px;
+    gap: 18px;
+    padding: 22px 20px 24px;
   }
 
   #wh-estimator .quiz_main-content {
-    height: auto;
-    grid-template-rows: auto auto;
-    overflow: visible;
+    min-height: 0;
   }
 
   #wh-estimator .quiz_changable-content {
-    height: auto;
     min-height: 0;
-    overflow: visible;
-    grid-template-rows: none;
   }
 
   #wh-estimator .quiz_step-content,
   #wh-estimator .form-field-wrapper {
     overflow: visible;
-    padding-right: 0;
   }
 
   #wh-estimator .stepHeader h2,
   #wh-estimator .quiz_question-title {
-    font-size: 22px;
+    font-size: 23px;
   }
 
   #wh-estimator .quiz_question-image-wrapper {
@@ -954,36 +1100,58 @@
   #wh-estimator .choicesGrid {
     max-height: none;
     overflow: visible;
-    padding-right: 0;
   }
 
   #wh-estimator .wh_choice-radio,
   #wh-estimator .quiz-radio,
   #wh-estimator .quiz-checkbox,
   #wh-estimator .choiceMain {
-    min-height: 58px;
-    padding: 13px;
+    min-height: 60px;
+    padding: 14px;
   }
 
   #wh-estimator .quiz_option-img-wrapper,
   #wh-estimator .oimg {
-    width: 64px;
-    height: 44px;
+    width: 66px;
+    height: 46px;
   }
 
+  /* Stacked nav: primary action first, then back, then a quiet "start over"
+     link. Buttons size to content height (fixes the ballooned-pill bug). */
   #wh-estimator .quiz_nav-actions,
   #wh-estimator .nav {
     flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding-top: 16px;
+  }
+
+  #wh-estimator .quiz_next-button,
+  #wh-estimator .btn {
+    order: -1;
+    flex: 0 0 auto;
+    width: 100%;
+    margin-left: 0;
   }
 
   #wh-estimator .quiz_back-button,
-  #wh-estimator .quiz_start-over-button,
-  #wh-estimator .quiz_next-button,
-  #wh-estimator .btn {
+  #wh-estimator .btn.secondary {
+    order: 0;
+    flex: 0 0 auto;
     width: 100%;
+  }
+
+  #wh-estimator .quiz_start-over-button {
+    order: 1;
+    flex: 0 0 auto;
+    width: auto;
+    min-height: 0;
+    margin: 2px auto 0;
+    padding: 8px 14px;
   }
 }
 
+/* ---------------- Reduced motion ---------------- */
 @media (prefers-reduced-motion: reduce) {
   #wh-estimator *,
   #wh-estimator *::before,
