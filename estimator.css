@@ -384,7 +384,6 @@
   border-color: var(--quiz-accent);
   background: var(--quiz-accent-tint);
   box-shadow: inset 0 0 0 1px var(--quiz-accent);
-  animation: wh-choice-select var(--quiz-motion-medium) var(--quiz-motion-ease) both;
 }
 
 #wh-estimator .quiz-option:focus-visible,

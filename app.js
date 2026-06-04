@@ -781,7 +781,14 @@
       return { mode: "range", label: "Estimated Range", value: `$${money(pr.low)}-$${money(pr.high)}`, sub: "Range updates as you go. Add your address to get an exact number.", disclaimer };
     }
 
-    function renderSingleSelect(q, content) {
+    function setChoiceActive(optionEl, inputEl, active) {
+      optionEl.classList.toggle("is-input-active", active);
+      optionEl.classList.toggle("active", active);
+      optionEl.setAttribute("aria-checked", active ? "true" : "false");
+      if (inputEl) inputEl.checked = active;
+    }
+
+    function renderSingleSelect(q, content, ui) {
       const opts = q.options || [];
       const hasImages = opts.some((o) => !!o.image_url);
       const wrap = mk("div", {
@@ -793,47 +800,56 @@
       opts.forEach((opt) => {
         const active = String(state.answers[q.id]) === String(opt.value);
         const optionImageUrl = opt.image_url || "";
-        const selectOption = () => {
+        let optionEl;
+        let inputEl;
+        const selectOption = (event) => {
+          event?.preventDefault();
+
           state.answers[q.id] = String(opt.value);
+          wrap.querySelectorAll(".quiz-option").forEach((el) => {
+            setChoiceActive(el, el.querySelector("input"), false);
+          });
+          setChoiceActive(optionEl, inputEl, true);
           saveState(state, cfg);
-          scheduleRender();
+          ui?.updateNextDisabled();
+          ui?.updatePreview();
         };
 
-        wrap.appendChild(
-          mk(
-            "div",
-            {
-              class: `quiz-option choice ${active ? "is-input-active active" : ""} ${optionImageUrl ? "has-image" : ""}`,
-              onClick: selectOption
-            },
-            [
-              mk("label", { class: "wh_choice-radio" }, [
-                mk("input", {
-                  class: "wh_choice-native-radio",
-                  type: "radio",
-                  name: `wh_${q.id}`,
-                  value: opt.value,
-                  checked: active,
-                  onChange: selectOption
-                }),
-                mk("span", { class: "wh_choice-radio-button", "aria-hidden": "true" }),
-                mk("div", { class: "wh_choice-content" }, [
-                  mk("div", { class: "quiz_option-label" }, [opt.label]),
-                  opt.tooltip ? mk("div", { class: "quiz_option-description" }, [opt.tooltip]) : null
-                ]),
-                optionImageUrl ? mk("div", { class: "quiz_option-img-wrapper" }, [
-                  mk("img", { class: "quiz_option-img", src: optionImageUrl, alt: "", loading: "lazy" })
-                ]) : null
-              ])
-            ]
-          )
-        );
+        inputEl = mk("input", {
+          class: "wh_choice-native-radio",
+          type: "radio",
+          name: `wh_${q.id}`,
+          value: opt.value,
+          checked: active,
+          onChange: () => {}
+        });
+
+        optionEl = mk("div", {
+          class: `quiz-option choice ${active ? "is-input-active active" : ""} ${optionImageUrl ? "has-image" : ""}`,
+          role: "radio",
+          "aria-checked": active ? "true" : "false",
+          onClick: selectOption
+        }, [
+          mk("label", { class: "wh_choice-radio" }, [
+            inputEl,
+            mk("span", { class: "wh_choice-radio-button", "aria-hidden": "true" }),
+            mk("div", { class: "wh_choice-content" }, [
+              mk("div", { class: "quiz_option-label" }, [opt.label]),
+              opt.tooltip ? mk("div", { class: "quiz_option-description" }, [opt.tooltip]) : null
+            ]),
+            optionImageUrl ? mk("div", { class: "quiz_option-img-wrapper" }, [
+              mk("img", { class: "quiz_option-img", src: optionImageUrl, alt: "", loading: "lazy" })
+            ]) : null
+          ])
+        ]);
+
+        wrap.appendChild(optionEl);
       });
 
       content.appendChild(wrap);
     }
 
-    function renderMultiSelect(q, content) {
+    function renderMultiSelect(q, content, ui) {
       const opts = q.options || [];
       const selectedValues = Array.isArray(state.answers[q.id]) ? state.answers[q.id] : [];
       const max = Number(q.max_selected ?? q.maxSelected ?? 0) || 0;
@@ -847,49 +863,60 @@
       opts.forEach((opt) => {
         const active = selectedValues.some((value) => String(value) === String(opt.value));
         const optionImageUrl = opt.image_url || "";
-        const toggleOption = () => {
+        let optionEl;
+        let inputEl;
+        const toggleOption = (event) => {
+          event?.preventDefault();
+
           const currentValues = Array.isArray(state.answers[q.id]) ? [...state.answers[q.id]] : [];
           const existingIndex = currentValues.findIndex((value) => String(value) === String(opt.value));
+          let nextActive = existingIndex < 0;
 
           if (existingIndex >= 0) {
             currentValues.splice(existingIndex, 1);
           } else if (!max || currentValues.length < max) {
             currentValues.push(String(opt.value));
+          } else {
+            nextActive = false;
+            return;
           }
 
           state.answers[q.id] = currentValues;
+          setChoiceActive(optionEl, inputEl, nextActive);
           saveState(state, cfg);
-          scheduleRender();
+          ui?.updateNextDisabled();
+          ui?.updatePreview();
         };
 
-        wrap.appendChild(
-          mk(
-            "div",
-            {
-              class: `quiz-option choice ${active ? "is-input-active active" : ""} ${optionImageUrl ? "has-image" : ""}`
-            },
-            [
-              mk("label", { class: "wh_choice-radio" }, [
-                mk("input", {
-                  class: "wh_choice-native-radio",
-                  type: "checkbox",
-                  name: `wh_${q.id}`,
-                  value: opt.value,
-                  checked: active,
-                  onChange: toggleOption
-                }),
-                mk("span", { class: "wh_choice-radio-button", "aria-hidden": "true" }),
-                mk("div", { class: "wh_choice-content" }, [
-                  mk("div", { class: "quiz_option-label" }, [opt.label]),
-                  opt.tooltip ? mk("div", { class: "quiz_option-description" }, [opt.tooltip]) : null
-                ]),
-                optionImageUrl ? mk("div", { class: "quiz_option-img-wrapper" }, [
-                  mk("img", { class: "quiz_option-img", src: optionImageUrl, alt: "", loading: "lazy" })
-                ]) : null
-              ])
-            ]
-          )
-        );
+        inputEl = mk("input", {
+          class: "wh_choice-native-radio",
+          type: "checkbox",
+          name: `wh_${q.id}`,
+          value: opt.value,
+          checked: active,
+          onChange: () => {}
+        });
+
+        optionEl = mk("div", {
+          class: `quiz-option choice ${active ? "is-input-active active" : ""} ${optionImageUrl ? "has-image" : ""}`,
+          role: "checkbox",
+          "aria-checked": active ? "true" : "false",
+          onClick: toggleOption
+        }, [
+          mk("label", { class: "wh_choice-radio" }, [
+            inputEl,
+            mk("span", { class: "wh_choice-radio-button", "aria-hidden": "true" }),
+            mk("div", { class: "wh_choice-content" }, [
+              mk("div", { class: "quiz_option-label" }, [opt.label]),
+              opt.tooltip ? mk("div", { class: "quiz_option-description" }, [opt.tooltip]) : null
+            ]),
+            optionImageUrl ? mk("div", { class: "quiz_option-img-wrapper" }, [
+              mk("img", { class: "quiz_option-img", src: optionImageUrl, alt: "", loading: "lazy" })
+            ]) : null
+          ])
+        ]);
+
+        wrap.appendChild(optionEl);
       });
 
       content.appendChild(wrap);
@@ -1367,8 +1394,8 @@
       };
     
       // body
-      if (q.type === "single_select") renderSingleSelect(q, content);
-      else if (q.type === "multi_select") renderMultiSelect(q, content);
+      if (q.type === "single_select") renderSingleSelect(q, content, ui);
+      else if (q.type === "multi_select") renderMultiSelect(q, content, ui);
       else if (q.type === "form") renderForm(q, content, ui);
       else if (q.type === "result") renderResult(q, content);
       else if (q.type === "summary") content.appendChild(mk("div", { class: "note" }, ["Review your answers, then continue."]));
