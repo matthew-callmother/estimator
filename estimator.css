@@ -101,7 +101,6 @@
 #wh-estimator .card {
   position: relative;
   width: min(100%, var(--quiz-card-width));
-  max-height: calc(100svh - 40px);
   overflow: hidden;
   border-radius: var(--quiz-radius);
   background: var(--quiz-card);
@@ -121,9 +120,9 @@
   background: var(--quiz-accent-grad);
 }
 
-/* Height now hugs content (no more dead space on short steps) but still caps to
-   the viewport. The flex column lets the middle region scroll when content is
-   taller than the cap, instead of clipping. */
+/* The card grows to its natural content height and lets the host page scroll.
+   No viewport cap and no internal scroll region: inside an embed those cause
+   clipped/unreachable options and content-width shifts between steps. */
 #wh-estimator .quiz_form-component {
   display: flex;
   flex-direction: column;
@@ -260,16 +259,13 @@
 }
 
 #wh-estimator .quiz_step-content {
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 0 0 auto;
   gap: 14px;
-  overflow: auto;
-  scrollbar-color: var(--quiz-border-strong) transparent;
-  scrollbar-width: thin;
+  overflow: visible;
 }
 
-/* Selection steps shouldn't introduce their own scroll container; the card caps
-   height and the inner region handles overflow. */
+/* Selection steps flow at their natural height; the page scrolls if a step is
+   taller than the viewport, so every option stays reachable. */
 #wh-estimator .quiz_step-content--single_select,
 #wh-estimator .quiz_step-content--multi_select {
   overflow: visible;
@@ -676,7 +672,8 @@
   inset: auto !important;
   appearance: none;
   min-height: 52px;
-  flex: 0 1 230px;
+  flex: 0 0 auto;
+  min-width: 200px;
   margin-left: auto;
   border: 0;
   border-radius: 999px;
@@ -1131,6 +1128,7 @@
     order: -1;
     flex: 0 0 auto;
     width: 100%;
+    min-width: 0;
     margin-left: 0;
   }
 
