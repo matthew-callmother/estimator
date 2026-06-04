@@ -12,6 +12,8 @@
 
   const MOUNT_ID = "wh-estimator";
   const STORAGE_KEY = "wh_estimator_routing_state";
+  const STATE_SCHEMA_VERSION = 2;
+  const STATE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
   const PROGRESS_COUNTED_TYPES = new Set(["single_select", "multi_select", "form", "summary"]);
   const CANONICAL_LEAD_FIELD_IDS = new Set([
     "contact_name",
@@ -57,6 +59,46 @@
   function getStorageKey(cfg) {
     const estimatorId = cfg?.estimatorId || cfg?.meta?.estimatorId || "default";
     return `${STORAGE_KEY}:${estimatorId}`;
+  }
+
+  function hashString(value) {
+    let hash = 0;
+    const text = String(value || "");
+    for (let i = 0; i < text.length; i += 1) {
+      hash = Math.imul(31, hash) + text.charCodeAt(i) | 0;
+    }
+    return (hash >>> 0).toString(36);
+  }
+
+  function getConfigSignature(cfg) {
+    const signatureShape = {
+      estimatorId: cfg?.estimatorId || cfg?.meta?.estimatorId || "default",
+      version: cfg?.version || cfg?.meta?.version || "",
+      start: cfg?.start || "",
+      features: cfg?.features || {},
+      questions: (cfg?.questions || []).map((q) => ({
+        id: q.id,
+        type: q.type,
+        next: q.next || null,
+        resultGate: q.result_gate || q.resultGate || q.reveals_result || q.revealsResult || false,
+        submitOnNext: q.submit_on_next || q.submitOnNext || false,
+        options: (q.options || []).map((opt) => ({
+          value: opt.value,
+          next: opt.next || null
+        })),
+        fields: (q.fields || []).map((field) => ({
+          id: field.id,
+          required: Boolean(field.required)
+        }))
+      })),
+      results: (cfg?.results || []).map((result) => ({
+        id: result.id,
+        next: result.next || null,
+        availability: result.availability || null
+      }))
+    };
+
+    return hashString(JSON.stringify(signatureShape));
   }
 
   // mk() ignores null/undefined/false and flattens arrays
@@ -238,6 +280,9 @@
   /* ---------------- State ---------------- */
   function defaultState() {
     return {
+      _schemaVersion: STATE_SCHEMA_VERSION,
+      _configSignature: null,
+      _savedAt: null,
       currentId: null,
       answers: {},
       history: [],
@@ -253,37 +298,53 @@
     };
   }
 
-  function loadState() {
+  function hydrateState(parsed) {
+    return {
+      ...defaultState(),
+      ...parsed,
+      answers: parsed?.answers && typeof parsed.answers === "object" ? parsed.answers : {},
+      history: Array.isArray(parsed?.history) ? parsed.history : [],
+      meta: { ...defaultState().meta, ...(parsed?.meta || {}) }
+    };
+  }
+
+  function readStoredState(key) {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return defaultState();
-      const parsed = JSON.parse(raw);
-      return {
-        ...defaultState(),
-        ...parsed,
-        meta: { ...defaultState().meta, ...(parsed.meta || {}) }
-      };
+      const raw = localStorage.getItem(key);
+      return raw ? hydrateState(JSON.parse(raw)) : null;
     } catch {
-      return defaultState();
+      return null;
     }
   }
 
-  function loadEstimatorState(cfg) {
-    try {
-      const raw = localStorage.getItem(getStorageKey(cfg));
-      if (!raw) return loadState();
-      const parsed = JSON.parse(raw);
-      return {
-        ...defaultState(),
-        ...parsed,
-        meta: { ...defaultState().meta, ...(parsed.meta || {}) }
-      };
-    } catch {
-      return defaultState();
-    }
+  function isStoredStateCompatible(cfg, qmap, state) {
+    if (!state) return false;
+    if (state._schemaVersion !== STATE_SCHEMA_VERSION) return false;
+    if (state._configSignature !== getConfigSignature(cfg)) return false;
+
+    const savedAt = Number(state._savedAt || 0);
+    if (!savedAt || Date.now() - savedAt > STATE_MAX_AGE_MS) return false;
+
+    if (state.currentId && !getQuestion(qmap, state.currentId)) return false;
+    if ((state.history || []).some((id) => !getQuestion(qmap, id))) return false;
+
+    return true;
+  }
+
+  function loadEstimatorState(cfg, qmap) {
+    const storageKey = getStorageKey(cfg);
+    const state = readStoredState(storageKey);
+    if (isStoredStateCompatible(cfg, qmap, state)) return state;
+
+    localStorage.removeItem(storageKey);
+    localStorage.removeItem(STORAGE_KEY);
+    return defaultState();
   }
 
   function saveState(state, cfg) {
+    state._schemaVersion = STATE_SCHEMA_VERSION;
+    state._configSignature = getConfigSignature(cfg);
+    state._savedAt = Date.now();
     localStorage.setItem(getStorageKey(cfg), JSON.stringify(state));
   }
 
@@ -756,7 +817,7 @@
     }
 
     const features = getFeatures(cfg);
-    const state = loadEstimatorState(cfg);
+    const state = loadEstimatorState(cfg, qmap);
 
     if (!state.currentId) state.currentId = cfg.start || (cfg.questions?.[0]?.id ?? null);
     if (!state.currentId) {
