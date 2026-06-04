@@ -6,6 +6,9 @@
   const DEFAULT_CONFIG_URL = "https://matthew-callmother.github.io/estimator/config.json";
   const DEFAULT_MUNICIPALITIES_URL = "https://matthew-callmother.github.io/estimator/municipalities-dfw.json";
   const DEFAULT_SERVICE_AREA_URL = "https://matthew-callmother.github.io/estimator/service-area.json";
+  const TIPPY_CSS_URL = "https://unpkg.com/tippy.js@6/dist/tippy.css";
+  const POPPER_URL = "https://unpkg.com/@popperjs/core@2/dist/umd/popper.min.js";
+  const TIPPY_URL = "https://unpkg.com/tippy.js@6/dist/tippy-bundle.umd.min.js";
 
   const MOUNT_ID = "wh-estimator";
   const STORAGE_KEY = "wh_estimator_routing_state";
@@ -87,50 +90,114 @@
   };
 
   /* ---------------- Tooltip ---------------- */
+  let tippyLoadPromise = null;
+
+  function loadStyleOnce(href) {
+    const existing = document.querySelector(`link[data-wh-lib-href="${href}"]`);
+    if (existing) return Promise.resolve();
+
+    return new Promise((resolve, reject) => {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = href;
+      link.dataset.whLibHref = href;
+      link.onload = resolve;
+      link.onerror = () => reject(new Error(`Failed to load stylesheet: ${href}`));
+      document.head.appendChild(link);
+    });
+  }
+
+  function loadScriptOnce(src, globalName) {
+    if (globalName && window[globalName]) return Promise.resolve();
+
+    const existing = document.querySelector(`script[data-wh-lib-src="${src}"]`);
+    if (existing) {
+      if (existing.dataset.loaded === "true") return Promise.resolve();
+      return new Promise((resolve, reject) => {
+        existing.addEventListener("load", resolve, { once: true });
+        existing.addEventListener("error", () => reject(new Error(`Failed to load script: ${src}`)), { once: true });
+      });
+    }
+
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = src;
+      script.async = true;
+      script.dataset.whLibSrc = src;
+      script.onload = () => {
+        script.dataset.loaded = "true";
+        resolve();
+      };
+      script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
+      document.head.appendChild(script);
+    });
+  }
+
+  function ensureTippy() {
+    if (window.tippy) return Promise.resolve(window.tippy);
+    if (!tippyLoadPromise) {
+      tippyLoadPromise = Promise.all([
+        loadStyleOnce(TIPPY_CSS_URL),
+        loadScriptOnce(POPPER_URL, "Popper")
+      ])
+        .then(() => loadScriptOnce(TIPPY_URL, "tippy"))
+        .then(() => {
+          if (typeof window.tippy !== "function") throw new Error("Tippy did not initialize.");
+          return window.tippy;
+        });
+    }
+    return tippyLoadPromise;
+  }
+
   function tooltip(text) {
     if (!text) return null;
 
-    const tip = mk("span", { class: "tip", role: "button", tabindex: 0, "aria-label": "More information" }, ["?"]);
-    const bubble = mk("div", { class: "tipBubble", html: text });
-    bubble.style.display = "none";
-
-    const wrap = mk("span", { class: "tipWrap" }, [tip, bubble]);
-    const showBubble = () => {
-      bubble.style.display = "block";
-    };
-    const hideBubble = () => {
-      bubble.style.display = "none";
-    };
-
-    wrap.addEventListener("mouseenter", showBubble);
-    wrap.addEventListener("mouseleave", hideBubble);
-    tip.addEventListener("focus", showBubble);
-    tip.addEventListener("blur", hideBubble);
-
-    tip.addEventListener("click", (e) => {
+    const stopCardClick = (e) => {
       e.preventDefault();
       e.stopPropagation();
-      bubble.style.display = bubble.style.display === "none" ? "block" : "none";
+    };
 
-      setTimeout(() => {
-        document.addEventListener(
-          "click",
-          () => {
-            hideBubble();
-          },
-          { once: true }
-        );
-      }, 0);
+    return mk("span", { class: "tipWrap" }, [
+      mk("span", {
+        class: "tip",
+        role: "button",
+        tabindex: 0,
+        "aria-label": "More information",
+        "data-tippy-content": text,
+        onClick: stopCardClick
+      }, ["?"])
+    ]);
+  }
+
+  function destroyTooltips(root) {
+    root.querySelectorAll(".tip[data-tippy-content]").forEach((tip) => {
+      if (tip._tippy) tip._tippy.destroy();
     });
+  }
 
-    tip.addEventListener("keydown", (e) => {
-      if (e.key !== "Enter" && e.key !== " ") return;
-      e.preventDefault();
-      tip.click();
-    });
+  function initializeTooltips(root) {
+    const tips = Array.from(root.querySelectorAll(".tip[data-tippy-content]"));
+    if (!tips.length) return;
 
-    bubble.addEventListener("click", (e) => e.stopPropagation());
-    return wrap;
+    ensureTippy()
+      .then((tippy) => {
+        const liveTips = tips.filter((tip) => document.contains(tip));
+        if (!liveTips.length) return;
+
+        tippy(liveTips, {
+          allowHTML: true,
+          appendTo: () => document.body,
+          delay: [60, 60],
+          hideOnClick: true,
+          interactive: false,
+          maxWidth: 280,
+          placement: "top",
+          theme: "wh-estimator",
+          trigger: "mouseenter focus click",
+          zIndex: 999999
+        });
+      })
+      .catch((error) => console.error(error));
   }
 
   function getOptionDescription(opt) {
@@ -1023,6 +1090,7 @@
 
 
     function renderLoadingStep(q, submittedId) {
+      destroyTooltips(mount);
       mount.innerHTML = "";
 
       const duration = Number(q.duration_ms || 1600);
@@ -1324,6 +1392,7 @@
         return;
       }
     
+      destroyTooltips(mount);
       mount.innerHTML = "";
     
       const progress = calculateProgress(qmap, cfg, state);
@@ -1450,6 +1519,7 @@
       ]);
       mount.appendChild(container);
       animateProgressBar(progress);
+      initializeTooltips(container);
       lastRenderedStepId = q.id;
     }
 

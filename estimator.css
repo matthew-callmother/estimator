@@ -903,21 +903,35 @@
   color: var(--quiz-accent);
 }
 
-#wh-estimator .tipBubble {
-  position: absolute;
-  z-index: 20;
-  top: 26px;
-  right: 0;
-  width: min(280px, 72vw);
-  border: 1px solid var(--quiz-border);
-  border-radius: var(--quiz-radius-sm);
+.tippy-box[data-theme~="wh-estimator"] {
+  border: 1px solid #e2e4ee;
+  border-radius: 11px;
   background: #ffffff;
   box-shadow: 0 18px 40px rgba(6, 6, 48, 0.2);
-  color: var(--quiz-text);
+  color: #0a0a3d;
   font-size: 12.5px;
   font-weight: 500;
   line-height: 1.45;
+}
+
+.tippy-box[data-theme~="wh-estimator"] .tippy-content {
   padding: 12px 13px;
+}
+
+.tippy-box[data-theme~="wh-estimator"][data-placement^="top"] > .tippy-arrow::before {
+  border-top-color: #ffffff;
+}
+
+.tippy-box[data-theme~="wh-estimator"][data-placement^="bottom"] > .tippy-arrow::before {
+  border-bottom-color: #ffffff;
+}
+
+.tippy-box[data-theme~="wh-estimator"][data-placement^="left"] > .tippy-arrow::before {
+  border-left-color: #ffffff;
+}
+
+.tippy-box[data-theme~="wh-estimator"][data-placement^="right"] > .tippy-arrow::before {
+  border-right-color: #ffffff;
 }
 
 /* ---------------- Keyframes ---------------- */
