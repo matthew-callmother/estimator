@@ -35,28 +35,67 @@ module.exports = async function handler(req, res) {
 
   try {
     const form = readBody(req);
-    const validationError = validateBooking(form);
+    const recordOnly = isRecordOnlyLead(form);
+    const validationError = recordOnly ? validateLead(form) : validateBooking(form);
 
     if (validationError) {
       return res.status(400).json({ error: validationError });
     }
 
+    if (recordOnly) {
+      const lead = await sendLeadWebhook(form, {
+        leadStage: form.leadStage || "result_gate",
+        serviceTitanStatus: "not_requested"
+      });
+
+      return res.status(200).json({
+        ok: true,
+        recordedOnly: true,
+        lead
+      });
+    }
+
     const booking = buildServiceTitanBooking(form);
 
     if (process.env.SERVICETITAN_DRY_RUN === "true") {
+      const lead = await sendLeadWebhook(form, {
+        leadStage: form.leadStage || "booking_submit",
+        serviceTitanStatus: "dry_run"
+      });
+
       return res.status(200).json({
         ok: true,
         dryRun: true,
         message: "Booking accepted. Dry run is enabled, so nothing was sent to ServiceTitan.",
-        booking
+        booking,
+        lead
       });
     }
 
-    const result = await createServiceTitanBooking(booking);
+    let result;
+    try {
+      result = await createServiceTitanBooking(booking);
+    } catch (error) {
+      await sendLeadWebhook(form, {
+        leadStage: "booking_failed",
+        serviceTitanStatus: "failed",
+        serviceTitanError: error.message,
+        serviceTitanCode: error.publicCode || "servicetitan_booking_failed"
+      });
+      throw error;
+    }
+
+    const bookingId = result.id ?? result.bookingId ?? null;
+    const lead = await sendLeadWebhook(form, {
+      leadStage: form.leadStage || "booking_submit",
+      serviceTitanStatus: "created",
+      serviceTitanBookingId: bookingId
+    });
 
     return res.status(200).json({
       ok: true,
-      bookingId: result.id ?? result.bookingId ?? null
+      bookingId,
+      lead
     });
   } catch (error) {
     console.error("Booking submission failed", {
@@ -95,7 +134,11 @@ function readBody(req) {
   return req.body;
 }
 
-function validateBooking(form) {
+function isRecordOnlyLead(form) {
+  return form.bookingAction === "record_only" || form.leadStage === "result_gate" || form.leadStage === "partial";
+}
+
+function validateLead(form) {
   if (!form.name || String(form.name).trim().length < 2) {
     return "Please include the customer's name.";
   }
@@ -103,6 +146,17 @@ function validateBooking(form) {
   if (!form.phone && !form.email) {
     return "Please include a phone number or email.";
   }
+
+  if (!form.zip) {
+    return "Please include the ZIP code.";
+  }
+
+  return null;
+}
+
+function validateBooking(form) {
+  const leadValidation = validateLead(form);
+  if (leadValidation) return leadValidation;
 
   if (!form.street || !form.city || !form.state || !form.zip) {
     return "Please include the complete service address.";
@@ -194,6 +248,85 @@ function buildSummary(form, submittedAt) {
   ];
 
   return sections.filter(Boolean).join("\n\n");
+}
+
+async function sendLeadWebhook(form, context = {}) {
+  const webhookUrl = cleanString(process.env.LEAD_WEBHOOK_URL || process.env.ZAPIER_LEAD_WEBHOOK_URL);
+  if (!webhookUrl) return { configured: false, recorded: false };
+
+  const payload = buildLeadWebhookPayload(form, context);
+
+  try {
+    const response = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      console.warn("Lead webhook failed", {
+        status: response.status,
+        statusText: response.statusText,
+        leadStage: payload.leadStage,
+        quizId: payload.quizId
+      });
+      return { configured: true, recorded: false, status: response.status };
+    }
+
+    return { configured: true, recorded: true, status: response.status };
+  } catch (error) {
+    console.warn("Lead webhook failed", {
+      message: error.message,
+      leadStage: payload.leadStage,
+      quizId: payload.quizId
+    });
+    return { configured: true, recorded: false, error: error.message };
+  }
+}
+
+function buildLeadWebhookPayload(form, context = {}) {
+  const recommendation = form.recommendation || form.selectedResult || {};
+  const serviceArea = form.serviceArea || {};
+  const readableAnswers = formatReadableAnswers(form);
+
+  return removeEmptyValues({
+    serverReceivedAt: new Date().toISOString(),
+    browserSubmittedAt: form.submittedAt,
+    leadStage: context.leadStage || form.leadStage || "unknown",
+    quizName: form.quizName || form.serviceName || form.service,
+    quizId: form.quizId || form.estimatorId,
+    serviceName: form.serviceName || form.service,
+    campaign: form.campaignLabel || form.campaign,
+    source: form.source,
+    serviceAreaChecked: serviceArea.checked,
+    serviceAreaEligible: serviceArea.eligible,
+    serviceAreaZip: serviceArea.zip || form.zip,
+    serviceAreaTitle: serviceArea.title,
+    serviceAreaMessage: serviceArea.message,
+    name: form.name,
+    email: form.email,
+    phone: form.phone,
+    street: form.street,
+    unit: form.unit,
+    city: form.city,
+    state: form.state,
+    zip: form.zip,
+    country: form.country,
+    resultId: recommendation.id,
+    resultTitle: recommendation.title,
+    tieDetected: recommendation.isTie,
+    tiedResultIds: Array.isArray(recommendation.tiedResultIds) ? recommendation.tiedResultIds.join(", ") : undefined,
+    tieBreakerReason: recommendation.tieBreakerReason,
+    pageUrl: form.pageUrl,
+    priceRange: form.priceRange,
+    exactTotal: form.exactTotal,
+    answers: readableAnswers.map((item) => `${item.question}: ${item.answer}`).join("\n"),
+    serviceTitanStatus: context.serviceTitanStatus,
+    serviceTitanBookingId: context.serviceTitanBookingId,
+    serviceTitanError: context.serviceTitanError,
+    serviceTitanCode: context.serviceTitanCode,
+    rawPayload: JSON.stringify(form)
+  });
 }
 
 function summarySection(title, lines) {

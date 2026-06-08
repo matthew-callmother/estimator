@@ -293,7 +293,8 @@
         selected_result_id: null,
         selected_result_source: null,
         service_area_status: null,
-        service_area_sig: null
+        service_area_sig: null,
+        lead_checkpoint_sigs: {}
       }
     };
   }
@@ -1236,7 +1237,9 @@
         state.meta.selected_result_source = "highest_score";
       }
 
-      if (current.result_gate === true || current.resultGate === true || current.reveals_result === true || current.revealsResult === true) {
+      const isResultGate = current.result_gate === true || current.resultGate === true || current.reveals_result === true || current.revealsResult === true;
+
+      if (isResultGate) {
         await updateServiceAreaStatus();
       }
 
@@ -1252,6 +1255,11 @@
       if (getResultById(cfg, nextId) && !revealsWinningResult && !shouldScoreResult) {
         state.meta.selected_result_id = nextId;
         state.meta.selected_result_source = "direct";
+      }
+
+      if (isResultGate) {
+        const serviceAreaStatus = getStoredServiceAreaStatus(state) || state.meta.service_area_status;
+        void sendLeadCheckpoint("result_gate", serviceAreaStatus);
       }
 
       if (!nextId) return;
@@ -1392,11 +1400,53 @@
       el.textContent = text;
     }
 
+    function getLeadCheckpointSig(stage, serviceAreaStatus) {
+      return [
+        stage,
+        safeStr(state.answers.contact_name).toLowerCase(),
+        safeStr(state.answers.contact_email).toLowerCase(),
+        normalizeZip(state.answers.addr_zip),
+        state.meta.selected_result_id || "",
+        serviceAreaStatus?.eligible === false ? "out" : "in"
+      ].join("|");
+    }
+
+    async function sendLeadCheckpoint(stage, serviceAreaStatus) {
+      const sig = getLeadCheckpointSig(stage, serviceAreaStatus);
+      state.meta.lead_checkpoint_sigs = state.meta.lead_checkpoint_sigs || {};
+      if (state.meta.lead_checkpoint_sigs[stage] === sig) return { skippedDuplicate: true };
+
+      const payload = buildBookingPayload(null, serviceAreaStatus);
+      payload.leadStage = stage;
+      payload.bookingAction = "record_only";
+
+      try {
+        const response = await fetch(getBookingEndpoint(), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          console.warn(`Lead checkpoint failed with status ${response.status}`);
+          return { ok: false, status: response.status };
+        }
+
+        state.meta.lead_checkpoint_sigs[stage] = sig;
+        saveState(state, cfg);
+        return await response.json().catch(() => ({ ok: true }));
+      } catch (error) {
+        console.warn("Lead checkpoint failed:", error);
+        return { ok: false, error: error?.message || "Lead checkpoint failed" };
+      }
+    }
+
     async function submitPayload() {
       const sharedServiceArea = await loadServiceAreaIfNeeded(features);
       const serviceAreaStatus = getServiceAreaStatus(cfg, state.answers, features, sharedServiceArea);
       const pr = features.pricing ? sumPricing(cfg, qmap, state) : null;
       const payload = buildBookingPayload(pr, serviceAreaStatus);
+      payload.leadStage = "booking_submit";
 
       if (serviceAreaStatus.checked && !serviceAreaStatus.eligible) {
         return {
