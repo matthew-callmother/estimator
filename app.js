@@ -1259,7 +1259,7 @@
 
       if (isResultGate) {
         const serviceAreaStatus = getStoredServiceAreaStatus(state) || state.meta.service_area_status;
-        void sendLeadCheckpoint("result_gate", serviceAreaStatus);
+        await sendLeadCheckpoint("result_gate", serviceAreaStatus);
       }
 
       if (!nextId) return;

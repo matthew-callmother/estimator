@@ -43,6 +43,16 @@ module.exports = async function handler(req, res) {
     }
 
     if (recordOnly) {
+      console.log("Lead record-only request received", {
+        leadStage: form.leadStage || "result_gate",
+        quizId: form.quizId || form.estimatorId || null,
+        hasWebhook: Boolean(process.env.LEAD_WEBHOOK_URL || process.env.ZAPIER_LEAD_WEBHOOK_URL),
+        hasName: Boolean(form.name),
+        hasEmail: Boolean(form.email),
+        hasPhone: Boolean(form.phone),
+        zip: cleanString(form.zip) || null
+      });
+
       const lead = await sendLeadWebhook(form, {
         leadStage: form.leadStage || "result_gate",
         serviceTitanStatus: "not_requested"
@@ -252,16 +262,34 @@ function buildSummary(form, submittedAt) {
 
 async function sendLeadWebhook(form, context = {}) {
   const webhookUrl = cleanString(process.env.LEAD_WEBHOOK_URL || process.env.ZAPIER_LEAD_WEBHOOK_URL);
-  if (!webhookUrl) return { configured: false, recorded: false };
+  if (!webhookUrl) {
+    console.log("Lead webhook not configured", {
+      leadStage: context.leadStage || form.leadStage || "unknown",
+      quizId: form.quizId || form.estimatorId || null
+    });
+    return { configured: false, recorded: false };
+  }
 
   const payload = buildLeadWebhookPayload(form, context);
+  console.log("Sending lead webhook", {
+    leadStage: payload.leadStage,
+    quizId: payload.quizId,
+    serviceAreaEligible: payload.serviceAreaEligible,
+    hasEmail: Boolean(payload.email),
+    hasPhone: Boolean(payload.phone)
+  });
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 2500);
 
   try {
     const response = await fetch(webhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal: controller.signal
     });
+    clearTimeout(timeout);
 
     if (!response.ok) {
       console.warn("Lead webhook failed", {
@@ -273,8 +301,15 @@ async function sendLeadWebhook(form, context = {}) {
       return { configured: true, recorded: false, status: response.status };
     }
 
+    console.log("Lead webhook recorded", {
+      status: response.status,
+      leadStage: payload.leadStage,
+      quizId: payload.quizId
+    });
+
     return { configured: true, recorded: true, status: response.status };
   } catch (error) {
+    clearTimeout(timeout);
     console.warn("Lead webhook failed", {
       message: error.message,
       leadStage: payload.leadStage,
