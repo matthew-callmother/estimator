@@ -294,6 +294,7 @@
         selected_result_source: null,
         service_area_status: null,
         service_area_sig: null,
+        cover_seen: false,
         lead_checkpoint_sigs: {}
       }
     };
@@ -1125,6 +1126,63 @@
       ]);
     }
 
+    function hasCover(cfg) {
+      return Boolean(cfg?.cover && (cfg.cover.title || cfg.cover.image_url || cfg.cover.description || cfg.cover.subtitle));
+    }
+
+    function shouldShowCover() {
+      return hasCover(cfg) && !state.meta.cover_seen && !hasQuizProgress(cfg, state);
+    }
+
+    function formatMultilineText(text, className) {
+      if (!text) return null;
+
+      return mk("div", { class: className }, String(text).split(/\n{2,}/).map((paragraph) => (
+        mk("p", {}, [paragraph.replace(/\s*\n\s*/g, " ").trim()])
+      )));
+    }
+
+    function renderCover() {
+      saveState(state, cfg);
+      destroyTooltips(mount);
+      mount.innerHTML = "";
+
+      const cover = cfg.cover || {};
+      const imageUrl = cover.image_url || cover.imageUrl || "";
+      const imageAlt = cover.image_alt || cover.imageAlt || cover.title || cfg.quizName || "Quiz cover image";
+      const buttonLabel = cover.button_label || cover.buttonLabel || "Start Quiz";
+
+      const startBtn = mk("button", {
+        class: "quiz_next-button quiz_cover-button",
+        type: "button",
+        onClick: () => {
+          state.meta.cover_seen = true;
+          saveState(state, cfg);
+          lastRenderedStepId = null;
+          scheduleRender();
+        }
+      }, [buttonLabel]);
+
+      const coverContent = mk("div", { class: "quiz_cover-content" }, [
+        imageUrl ? mk("div", { class: "quiz_cover-image-wrapper" }, [
+          mk("img", { class: "quiz_cover-image", src: imageUrl, alt: imageAlt, loading: "eager" })
+        ]) : null,
+        mk("div", { class: "quiz_cover-copy" }, [
+          cover.title ? mk("div", { class: "quiz_cover-title" }, [cover.title]) : null,
+          cover.subtitle ? mk("div", { class: "quiz_cover-subtitle" }, [cover.subtitle]) : null,
+          formatMultilineText(cover.description, "quiz_cover-description"),
+          mk("div", { class: "quiz_cover-actions" }, [startBtn])
+        ])
+      ]);
+
+      const container = mk("div", { class: "quiz_form-component quiz_cover-card" }, [
+        mk("div", { class: "quiz_main-content quiz_cover-main" }, [coverContent])
+      ]);
+
+      mount.appendChild(container);
+      lastRenderedStepId = "__cover";
+    }
+
     function renderResult(q, content) {
       const scores = getResultScores(cfg, state.answers);
       const outcome = getWinningResultOutcome(cfg, state.answers);
@@ -1487,6 +1545,11 @@
 
     function render() {
       saveState(state, cfg);
+
+      if (shouldShowCover()) {
+        renderCover();
+        return;
+      }
     
       const q = getQuestion(qmap, state.currentId);
       if (!q) {

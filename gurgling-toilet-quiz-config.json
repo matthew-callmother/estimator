@@ -6,6 +6,15 @@
   },
   "estimatorId": "gurgling-toilet-quiz",
   "quizName": "Why Is My Toilet Gurgling?",
+  "cover": {
+    "title": "Why Is My Toilet Gurgling?",
+    "subtitle": "Answer a few quick questions to find out if it's probably a toilet clog, vent issue, sewer line problem, or septic warning sign.",
+    "description": "That weird bubbling sound usually means air is getting pulled through the drain system somewhere it should not be. Sometimes it's a simple clog. Sometimes it's a warning sign that the problem is deeper in the sewer line.\n\nTake the quiz to get a practical next step before you keep flushing, plunging, or calling the wrong kind of company.",
+    "button_label": "Find the Likely Cause",
+    "image_url": "https://cdn.prod.website-files.com/678144dfb4c536263e714199/6a337c7fe4e426545c63b7b2_bubbling-gurgling-toilet.webp",
+    "image_prompt": "A clean, modern bathroom scene focused on a white toilet with subtle bubbling water in the bowl, suggesting trapped air or a drain issue. The bathroom should look realistic, bright, and slightly tense but not gross. Add faint motion/ripple detail in the toilet water, with no sewage, mess, or horror styling. Professional home-service blog image, natural light, crisp detail, trustworthy and practical.",
+    "seo_description": "A quick diagnostic quiz for homeowners with a gurgling toilet. Find out whether the likely cause is a local clog, plumbing vent issue, main sewer line blockage, or septic system problem."
+  },
   "serviceName": "Gurgling toilet diagnostic quiz",
   "defaultCountry": "United States",
   "campaign": "Gurgling Toilet Blog Quiz",
