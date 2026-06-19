@@ -2,18 +2,18 @@
   "meta": {
     "estimatorId": "gurgling-toilet-quiz",
     "serviceName": "Gurgling toilet diagnostic quiz",
-    "version": "gurgling-toilet-v1"
+    "version": "gurgling-toilet-v2"
   },
   "estimatorId": "gurgling-toilet-quiz",
   "quizName": "Why Is My Toilet Gurgling?",
   "cover": {
     "title": "Why Is My Toilet Gurgling?",
-    "subtitle": "Answer a few quick questions to find out if it's probably a toilet clog, vent issue, sewer line problem, or septic warning sign.",
-    "description": "That weird bubbling sound usually means air is getting pulled through the drain system somewhere it should not be. Sometimes it's a simple clog. Sometimes it's a warning sign that the problem is deeper in the sewer line.\n\nTake the quiz to get a practical next step before you keep flushing, plunging, or calling the wrong kind of company.",
-    "button_label": "Find the Likely Cause",
+    "subtitle": "Answer to see if your clog is DIY'able or if you need to call a professional.",
+    "description": "That bubbling sound usually means air is getting pulled through the drain somewhere it should not be.\n\nSometimes it is a simple clog. Sometimes it means the problem is deeper in the line.",
+    "button_label": "Find the Cause",
     "image_url": "https://cdn.prod.website-files.com/678144dfb4c536263e714199/6a337c7fe4e426545c63b7b2_bubbling-gurgling-toilet.webp",
     "image_prompt": "A clean, modern bathroom scene focused on a white toilet with subtle bubbling water in the bowl, suggesting trapped air or a drain issue. The bathroom should look realistic, bright, and slightly tense but not gross. Add faint motion/ripple detail in the toilet water, with no sewage, mess, or horror styling. Professional home-service blog image, natural light, crisp detail, trustworthy and practical.",
-    "seo_description": "A quick diagnostic quiz for homeowners with a gurgling toilet. Find out whether the likely cause is a local clog, plumbing vent issue, main sewer line blockage, or septic system problem."
+    "seo_description": "A quick diagnostic quiz for homeowners with a gurgling toilet. Find out whether the likely cause is a shallow clog, blocked sewer line, or plumbing vent issue."
   },
   "serviceName": "Gurgling toilet diagnostic quiz",
   "defaultCountry": "United States",
@@ -37,33 +37,68 @@
           "value": "city_sewer",
           "label": "City sewer",
           "scores": {
-            "simple_toilet_clog": 0,
-            "blocked_vent_or_airflow": 0,
-            "main_line_blockage": 0,
-            "septic_system_guidance": 0
+            "shallow_clog": 0,
+            "blocked_sewer_line": 0,
+            "vent_issue": 0
           },
-          "next": "gurgle_pattern"
+          "next": "floor_level"
         },
         {
           "value": "septic_system",
           "label": "Septic system",
-          "tooltip": "A septic tank, drain field, aerobic system, or private wastewater system usually needs a septic specialist, not a city sewer drain cleaning appointment.",
+          "tooltip": "A private septic system may need a septic company instead of a city sewer drain cleaning appointment.",
           "scores": {
-            "simple_toilet_clog": 0,
-            "blocked_vent_or_airflow": 0,
-            "main_line_blockage": 0,
-            "septic_system_guidance": 12
+            "shallow_clog": 0,
+            "blocked_sewer_line": 3,
+            "vent_issue": 0
           },
-          "next": "gurgle_pattern"
+          "next": "floor_level"
         },
         {
           "value": "not_sure",
           "label": "I'm not sure",
           "scores": {
-            "simple_toilet_clog": 0,
-            "blocked_vent_or_airflow": 0,
-            "main_line_blockage": 1,
-            "septic_system_guidance": 1
+            "shallow_clog": 0,
+            "blocked_sewer_line": 1,
+            "vent_issue": 0
+          },
+          "next": "floor_level"
+        }
+      ]
+    },
+    {
+      "id": "floor_level",
+      "type": "single_select",
+      "title": "What floor is it on?",
+      "subtitle": "Lower fixtures usually show deeper drain problems first.",
+      "options": [
+        {
+          "value": "first_floor",
+          "label": "1st floor",
+          "scores": {
+            "shallow_clog": 1,
+            "blocked_sewer_line": 2,
+            "vent_issue": 0
+          },
+          "next": "gurgle_pattern"
+        },
+        {
+          "value": "second_floor",
+          "label": "2nd floor",
+          "scores": {
+            "shallow_clog": 2,
+            "blocked_sewer_line": 0,
+            "vent_issue": 1
+          },
+          "next": "gurgle_pattern"
+        },
+        {
+          "value": "basement",
+          "label": "Basement (uncommon)",
+          "scores": {
+            "shallow_clog": 0,
+            "blocked_sewer_line": 4,
+            "vent_issue": 0
           },
           "next": "gurgle_pattern"
         }
@@ -73,60 +108,55 @@
       "id": "gurgle_pattern",
       "type": "single_select",
       "title": "When does the toilet gurgle?",
-      "subtitle": "The timing tells us whether this is probably local, vent-related, or deeper in the line.",
+      "subtitle": "The timing tells us where the problem may be hiding.",
       "options": [
         {
-          "value": "after_toilet_flush",
-          "label": "Right after this toilet flushes",
+          "value": "after_flush",
+          "label": "Right after I flush it",
           "scores": {
-            "simple_toilet_clog": 4,
-            "blocked_vent_or_airflow": 1,
-            "main_line_blockage": 0,
-            "septic_system_guidance": 0
+            "shallow_clog": 4,
+            "blocked_sewer_line": 0,
+            "vent_issue": 0
           },
           "next": "fixture_scope"
         },
         {
-          "value": "when_other_fixture_runs",
-          "label": "When a shower, sink, tub, or washer runs",
+          "value": "without_flushing",
+          "label": "Without flushing it",
           "scores": {
-            "simple_toilet_clog": 0,
-            "blocked_vent_or_airflow": 3,
-            "main_line_blockage": 2,
-            "septic_system_guidance": 0
+            "shallow_clog": 0,
+            "blocked_sewer_line": 1,
+            "vent_issue": 4
           },
           "next": "fixture_scope"
         },
         {
-          "value": "multiple_toilets",
-          "label": "Multiple toilets or drains are noisy",
+          "value": "different_toilet",
+          "label": "When I flush a different toilet",
           "scores": {
-            "simple_toilet_clog": 0,
-            "blocked_vent_or_airflow": 1,
-            "main_line_blockage": 5,
-            "septic_system_guidance": 1
+            "shallow_clog": 0,
+            "blocked_sewer_line": 4,
+            "vent_issue": 2
           },
           "next": "fixture_scope"
         },
         {
-          "value": "backup_with_gurgle",
-          "label": "It gurgles and water backs up somewhere",
+          "value": "other_water_runs",
+          "label": "When I run water in my shower/sink/tub/washer",
           "scores": {
-            "simple_toilet_clog": 0,
-            "blocked_vent_or_airflow": 0,
-            "main_line_blockage": 7,
-            "septic_system_guidance": 2
+            "shallow_clog": 0,
+            "blocked_sewer_line": 3,
+            "vent_issue": 3
           },
           "next": "fixture_scope"
         },
         {
-          "value": "random_with_smell",
-          "label": "Randomly, and there is a sewer smell",
+          "value": "random_sewer_smell",
+          "label": "Randomly and it smells like sewer",
           "scores": {
-            "simple_toilet_clog": 0,
-            "blocked_vent_or_airflow": 5,
-            "main_line_blockage": 2,
-            "septic_system_guidance": 1
+            "shallow_clog": 0,
+            "blocked_sewer_line": 2,
+            "vent_issue": 5
           },
           "next": "fixture_scope"
         }
@@ -140,209 +170,125 @@
       "min_selected": 1,
       "options": [
         {
-          "value": "only_one_toilet",
-          "label": "Only one toilet is acting weird",
+          "value": "only_issue",
+          "label": "This is the only issue",
           "scores": {
-            "simple_toilet_clog": 4,
-            "blocked_vent_or_airflow": 0,
-            "main_line_blockage": 0,
-            "septic_system_guidance": 0
+            "shallow_clog": 4,
+            "blocked_sewer_line": 0,
+            "vent_issue": 0
           }
         },
         {
           "value": "nearby_bath_slow",
           "label": "A nearby tub, shower, or sink drains slowly",
           "scores": {
-            "simple_toilet_clog": 2,
-            "blocked_vent_or_airflow": 1,
-            "main_line_blockage": 1,
-            "septic_system_guidance": 0
+            "shallow_clog": 2,
+            "blocked_sewer_line": 2,
+            "vent_issue": 1
           }
         },
         {
           "value": "several_drains_slow",
           "label": "Several drains around the house are slow",
           "scores": {
-            "simple_toilet_clog": 0,
-            "blocked_vent_or_airflow": 1,
-            "main_line_blockage": 4,
-            "septic_system_guidance": 1
+            "shallow_clog": 0,
+            "blocked_sewer_line": 4,
+            "vent_issue": 1
           }
         },
         {
           "value": "lowest_drain_backup",
           "label": "Water backs up in a shower, tub, or floor drain",
           "scores": {
-            "simple_toilet_clog": 0,
-            "blocked_vent_or_airflow": 0,
-            "main_line_blockage": 6,
-            "septic_system_guidance": 2
+            "shallow_clog": 0,
+            "blocked_sewer_line": 6,
+            "vent_issue": 0
           }
         },
         {
           "value": "sewer_smell",
           "label": "There is a sewer smell",
           "scores": {
-            "simple_toilet_clog": 0,
-            "blocked_vent_or_airflow": 3,
-            "main_line_blockage": 2,
-            "septic_system_guidance": 1
+            "shallow_clog": 0,
+            "blocked_sewer_line": 2,
+            "vent_issue": 4
           }
         },
         {
           "value": "wet_yard_or_septic_alarm",
           "label": "Wet yard, septic smell outside, or septic alarm",
-          "tooltip": "These are septic-system warning signs. A city sewer drain cleaning appointment may not be the right fix.",
+          "tooltip": "If you are on a septic system, this may need a septic company instead of normal drain cleaning.",
           "scores": {
-            "simple_toilet_clog": 0,
-            "blocked_vent_or_airflow": 0,
-            "main_line_blockage": 1,
-            "septic_system_guidance": 7
+            "shallow_clog": 0,
+            "blocked_sewer_line": 5,
+            "vent_issue": 0
           }
         }
       ],
-      "next": "timing_urgency"
-    },
-    {
-      "id": "timing_urgency",
-      "type": "single_select",
-      "title": "How urgent does this feel?",
-      "subtitle": "A one-off gurgle is different from a pattern or active backup.",
-      "options": [
-        {
-          "value": "first_time",
-          "label": "First time, no backup yet",
-          "scores": {
-            "simple_toilet_clog": 2,
-            "blocked_vent_or_airflow": 1,
-            "main_line_blockage": 0,
-            "septic_system_guidance": 0
-          },
-          "next": "attempted_fixes"
-        },
-        {
-          "value": "repeating_days",
-          "label": "It has happened more than once",
-          "scores": {
-            "simple_toilet_clog": 1,
-            "blocked_vent_or_airflow": 2,
-            "main_line_blockage": 1,
-            "septic_system_guidance": 0
-          },
-          "next": "attempted_fixes"
-        },
-        {
-          "value": "after_big_water_use",
-          "label": "It happens after laundry, showers, or lots of water use",
-          "scores": {
-            "simple_toilet_clog": 0,
-            "blocked_vent_or_airflow": 2,
-            "main_line_blockage": 3,
-            "septic_system_guidance": 1
-          },
-          "next": "attempted_fixes"
-        },
-        {
-          "value": "after_rain",
-          "label": "It gets worse after rain",
-          "scores": {
-            "simple_toilet_clog": 0,
-            "blocked_vent_or_airflow": 1,
-            "main_line_blockage": 2,
-            "septic_system_guidance": 4
-          },
-          "next": "attempted_fixes"
-        },
-        {
-          "value": "active_backup",
-          "label": "There is wastewater or sewage backing up now",
-          "scores": {
-            "simple_toilet_clog": 0,
-            "blocked_vent_or_airflow": 0,
-            "main_line_blockage": 7,
-            "septic_system_guidance": 2
-          },
-          "next": "attempted_fixes"
-        }
-      ]
+      "next": "attempted_fixes"
     },
     {
       "id": "attempted_fixes",
       "type": "multi_select",
       "title": "What have you already tried?",
-      "subtitle": "This helps us avoid repeating steps that already failed.",
+      "subtitle": "Check everything that applies.",
       "min_selected": 1,
       "options": [
         {
-          "value": "nothing_yet",
-          "label": "Nothing yet",
+          "value": "nothing",
+          "label": "Nothing",
           "scores": {
-            "simple_toilet_clog": 1,
-            "blocked_vent_or_airflow": 0,
-            "main_line_blockage": 0,
-            "septic_system_guidance": 0
+            "shallow_clog": 1,
+            "blocked_sewer_line": 0,
+            "vent_issue": 0
           }
         },
         {
-          "value": "plunger_helped",
-          "label": "A plunger helped",
+          "value": "plunger",
+          "label": "Plunger",
           "scores": {
-            "simple_toilet_clog": 3,
-            "blocked_vent_or_airflow": 0,
-            "main_line_blockage": 0,
-            "septic_system_guidance": 0
+            "shallow_clog": 3,
+            "blocked_sewer_line": 1,
+            "vent_issue": 0
           }
         },
         {
-          "value": "plunger_did_not_help",
-          "label": "A plunger did not help",
-          "scores": {
-            "simple_toilet_clog": 1,
-            "blocked_vent_or_airflow": 1,
-            "main_line_blockage": 2,
-            "septic_system_guidance": 0
-          }
-        },
-        {
-          "value": "kept_flushing",
-          "label": "I kept flushing to see if it would stop",
+          "value": "flushing_it",
+          "label": "Flushing it",
           "tooltip": "Do not keep flushing a gurgling toilet. It can turn a partial clog into a backup.",
           "scores": {
-            "simple_toilet_clog": 0,
-            "blocked_vent_or_airflow": 0,
-            "main_line_blockage": 2,
-            "septic_system_guidance": 0
+            "shallow_clog": 0,
+            "blocked_sewer_line": 2,
+            "vent_issue": 0
           }
         },
         {
           "value": "chemical_drain_cleaner",
           "label": "Chemical drain cleaner",
-          "tooltip": "Chemical drain cleaners can be harsh on pipes. Enzyme cleaners are safer for ongoing prevention after the blockage is cleared.",
+          "tooltip": "Chemical drain cleaners can be harsh on pipes and usually do not fix vent or sewer line problems.",
           "scores": {
-            "simple_toilet_clog": 1,
-            "blocked_vent_or_airflow": 0,
-            "main_line_blockage": 1,
-            "septic_system_guidance": 0
+            "shallow_clog": 1,
+            "blocked_sewer_line": 1,
+            "vent_issue": 0
           }
         },
         {
-          "value": "snake_did_not_clear",
-          "label": "A snake or auger did not clear it",
+          "value": "hardware_store_snake",
+          "label": "Hardware store snake",
           "scores": {
-            "simple_toilet_clog": 0,
-            "blocked_vent_or_airflow": 1,
-            "main_line_blockage": 4,
-            "septic_system_guidance": 1
+            "shallow_clog": 1,
+            "blocked_sewer_line": 3,
+            "vent_issue": 0
           }
         },
         {
-          "value": "septic_service_needed",
-          "label": "The septic tank may be full or the septic alarm is on",
+          "value": "checked_septic_tank",
+          "label": "Checked septic tank",
+          "tooltip": "If the septic tank or alarm is involved, a septic company may be the right first call.",
           "scores": {
-            "simple_toilet_clog": 0,
-            "blocked_vent_or_airflow": 0,
-            "main_line_blockage": 0,
-            "septic_system_guidance": 8
+            "shallow_clog": 0,
+            "blocked_sewer_line": 4,
+            "vent_issue": 0
           }
         }
       ],
@@ -445,86 +391,61 @@
   ],
   "results": [
     {
-      "id": "simple_toilet_clog",
-      "title": "This Looks Like a Local Toilet Clog",
-      "message": "Good news: your answers point toward a clog near this toilet or its nearby branch drain, not necessarily a whole-home sewer emergency.\n\nDo not keep flushing it. If the clog is partial, repeated flushing can turn the gurgle into a backup. A plumber will usually start with the lowest-cost diagnostic path: confirm the local clog, clear it with the right auger or drain cleaning method, then help you prevent repeat clogs with safer habits and enzyme treatment.",
-      "html": "<p><a href=\"https://www.callmother.com/services/drain-cleaning\">See Mother's drain cleaning service</a> or read <a href=\"https://www.callmother.com/blogs/fast-plumbing-answers-can-you-flush-that\">what not to flush</a>.</p>",
+      "id": "shallow_clog",
+      "title": "This Looks Like a Shallow Clog",
+      "message": "Your answers point toward a clog close to the toilet or nearby drain. This is the most DIY'able result.\n\nYou can try a hardware store toilet auger or drain snake if you are comfortable. If the clog keeps coming back, or if plunging and a snake do not clear it, hiring a drain cleaning company is the safer next step.",
+      "html": "<p><a href=\"https://www.callmother.com/services/drain-cleaning\">See Mother's drain cleaning service</a>.</p>",
       "tie_priority": 20,
-      "tie_breaker_reason": "Your answers are balanced, so we recommend starting with the simplest likely fix: a local toilet or branch drain clog.",
+      "tie_breaker_reason": "Your answers are balanced, so we recommend starting with the simplest likely cause: a shallow clog close to the drain.",
       "availability": {
         "in_area": {
-          "message": "Mother serves your ZIP code and can help with drain cleaning.",
-          "next_label": "Schedule Drain Help",
+          "message": "Mother serves your ZIP code and can help with drain cleaning if you want a pro to clear it.",
+          "next_label": "Schedule Drain Cleaning",
           "next": "booking_capture"
         },
         "out_of_area": {
           "message": "Mother is not serving your ZIP code yet, so we cannot book this through our team right now.",
-          "advice": "Your result is still useful. Ask a local plumber whether they inspect after clearing the clog and whether they recommend an enzyme cleaner instead of harsh chemical drain cleaner.",
+          "advice": "Your result is still useful. Try a toilet auger if this is the only issue, or ask a local drain cleaning company for help if it keeps coming back.",
           "next": null
         }
       }
     },
     {
-      "id": "blocked_vent_or_airflow",
-      "title": "This May Be a Vent or Airflow Problem",
-      "message": "Your answers point toward an air movement problem in the drain system. When a plumbing vent is blocked or restricted, water can pull air through the toilet bowl and make that gurgling sound. A sewer smell makes this more likely.\n\nDo not climb onto the roof to clear a vent yourself. The safer path is a plumber inspection: confirm there is not a local clog first, then inspect the vent opening and decide whether the obstruction can be removed or needs drain equipment.",
-      "html": "<p>Read the full guide: <a href=\"https://www.callmother.com/blogs/fast-plumbing-answers-gurgling-sound-from-toilet\">Gurgling Sound from Toilet?</a></p>",
-      "tie_priority": 30,
-      "tie_breaker_reason": "Your answers are balanced, so we recommend checking airflow and venting when gurgling comes with odor or happens while other fixtures run.",
-      "availability": {
-        "in_area": {
-          "message": "Mother serves your ZIP code and can inspect the toilet, branch drain, and venting path.",
-          "next_label": "Schedule a Diagnostic",
-          "next": "booking_capture"
-        },
-        "out_of_area": {
-          "message": "Mother is not serving your ZIP code yet, so we cannot book this through our team right now.",
-          "advice": "Your result is still useful. Ask a local plumber to rule out a local clog first, then inspect the vent. Do not DIY roof vent clearing.",
-          "next": null
-        }
-      }
-    },
-    {
-      "id": "main_line_blockage",
-      "title": "This Looks Like a Deeper Sewer Line Issue",
-      "message": "Multiple fixtures, backups, or water showing up in the lowest drain usually means the blockage is deeper than one toilet. This can be a main sewer line blockage, a sagging sewer pipe, or another restriction that needs a camera inspection.\n\nStop running water if wastewater is backing up. The cost-effective order is: confirm it is not a local clog, check venting if the symptoms fit, then run a sewer camera inspection before recommending hydro jetting or sewer repair.",
+      "id": "blocked_sewer_line",
+      "title": "This Looks Like a Blocked Sewer Line",
+      "message": "Your answers point toward a deeper blockage, especially if multiple drains are involved or water is backing up in a shower, tub, or floor drain.\n\nThis is usually not a DIY solution. You will likely need sewer cleaning services, and a camera inspection may be needed before anyone recommends hydro jetting or repair.",
       "html": "<p>Next step: <a href=\"https://www.callmother.com/services/sewer-line-repair-and-replacement\">learn about sewer line inspection and repair</a>.</p>",
       "tie_priority": 40,
-      "tie_breaker_reason": "Your answers are balanced, so we recommend treating it as a deeper sewer line issue when multiple fixtures or active backup symptoms are present.",
+      "tie_breaker_reason": "Your answers are balanced, so we recommend treating it as a deeper sewer line issue when lower fixtures, multiple drains, or backups are involved.",
       "availability": {
         "in_area": {
-          "message": "Mother serves your ZIP code and can start with a drain diagnostic and camera inspection.",
+          "message": "Mother serves your ZIP code and can help diagnose a deeper sewer line blockage.",
           "next_label": "Schedule Sewer Help",
           "next": "booking_capture"
         },
         "out_of_area": {
           "message": "Mother is not serving your ZIP code yet, so we cannot book this through our team right now.",
-          "advice": "Your result is still useful. Ask a local plumber for a camera inspection before approving hydro jetting or sewer line repair.",
+          "advice": "Your result is still useful. Ask a local plumber for sewer cleaning and camera inspection before approving major repair work.",
           "next": null
         }
       }
     },
     {
-      "id": "septic_system_guidance",
-      "title": "This May Be a Septic System Issue",
-      "message": "Because your answers point toward septic, this should not be handled like a normal city sewer drain cleaning lead. Gurgling can happen when the septic tank is full, the drain field is saturated, the system is backing up, or the private sewer line to the tank is restricted.\n\nAvoid running extra water and do not keep flushing if wastewater is backing up. Your best next step is to contact a septic pumping or septic repair company that can inspect the tank, system alarms, drain field, and line to the tank.",
-      "html": "<p>If you are actually on city sewer, go back and change that answer. Otherwise, read the guide for general context: <a href=\"https://www.callmother.com/blogs/fast-plumbing-answers-gurgling-sound-from-toilet\">Gurgling Sound from Toilet?</a></p>",
-      "tie_priority": 50,
-      "tie_breaker_reason": "Your answers are balanced, so we choose the septic guidance result when septic is possible because it prevents routing the lead into the wrong service workflow.",
+      "id": "vent_issue",
+      "title": "This May Be a Vent Issue",
+      "message": "Your answers point toward a plumbing vent problem. Vent issues can make a toilet gurgle because air is being pulled through the drain system in the wrong place.\n\nThis is usually not a DIY solution. A plumber should check the venting path and roof vent before anyone assumes the toilet itself is the problem.",
+      "html": "<p>Learn more: <a href=\"https://www.callmother.com/blogs/sewer-vent-problems-cleaning-repairs\">Sewer vent problems, cleaning, and repairs</a>.</p>",
+      "tie_priority": 30,
+      "tie_breaker_reason": "Your answers are balanced, so we recommend checking venting when the gurgle happens without flushing, when other fixtures run, or when sewer smell is present.",
       "availability": {
-        "default": {
-          "message": "This result is informational only and does not route to ServiceTitan booking.",
-          "advice": "If your home is on a private septic system, call a septic company before booking city sewer drain cleaning.",
-          "next": null
-        },
         "in_area": {
-          "message": "Even if your ZIP is in Mother's service area, septic issues usually need a septic specialist first.",
-          "advice": "If you confirm the home is on city sewer instead, restart the quiz and choose city sewer.",
-          "next": null
+          "message": "Mother serves your ZIP code and can inspect the drain and venting path.",
+          "next_label": "Schedule a Diagnostic",
+          "next": "booking_capture"
         },
         "out_of_area": {
-          "message": "This result is informational only and does not route to ServiceTitan booking.",
-          "advice": "If your home is on a private septic system, call a septic company before booking city sewer drain cleaning.",
+          "message": "Mother is not serving your ZIP code yet, so we cannot book this through our team right now.",
+          "advice": "Your result is still useful. Ask a local plumber to check venting and avoid climbing onto the roof yourself.",
           "next": null
         }
       }
