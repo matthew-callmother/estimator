@@ -393,6 +393,7 @@
     {
       "id": "shallow_clog",
       "title": "This Looks Like a Shallow Clog",
+      "image_url": "https://matthew-callmother.github.io/estimator/assets/gurgling-toilet-shallow-clog.webp",
       "message": "Your answers point toward a clog close to the toilet or nearby drain. This is the most DIY'able result.\n\nYou can try a hardware store toilet auger or drain snake if you are comfortable. If the clog keeps coming back, or if plunging and a snake do not clear it, hiring a drain cleaning company is the safer next step.",
       "html": "<p><a href=\"https://www.callmother.com/services/drain-cleaning\">See Mother's drain cleaning service</a>.</p>",
       "tie_priority": 20,
@@ -413,6 +414,7 @@
     {
       "id": "blocked_sewer_line",
       "title": "This Looks Like a Blocked Sewer Line",
+      "image_url": "https://matthew-callmother.github.io/estimator/assets/gurgling-toilet-blocked-sewer-line.webp",
       "message": "Your answers point toward a deeper blockage, especially if multiple drains are involved or water is backing up in a shower, tub, or floor drain.\n\nThis is usually not a DIY solution. You will likely need sewer cleaning services, and a camera inspection may be needed before anyone recommends hydro jetting or repair.",
       "html": "<p>Next step: <a href=\"https://www.callmother.com/services/sewer-line-repair-and-replacement\">learn about sewer line inspection and repair</a>.</p>",
       "tie_priority": 40,
@@ -433,6 +435,7 @@
     {
       "id": "vent_issue",
       "title": "This May Be a Vent Issue",
+      "image_url": "https://matthew-callmother.github.io/estimator/assets/gurgling-toilet-vent-issue.webp",
       "message": "Your answers point toward a plumbing vent problem. Vent issues can make a toilet gurgle because air is being pulled through the drain system in the wrong place.\n\nThis is usually not a DIY solution. A plumber should check the venting path and roof vent before anyone assumes the toilet itself is the problem.",
       "html": "<p>Learn more: <a href=\"https://www.callmother.com/blogs/sewer-vent-problems-cleaning-repairs\">Sewer vent problems, cleaning, and repairs</a>.</p>",
       "tie_priority": 30,
