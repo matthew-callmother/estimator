@@ -12,6 +12,8 @@
 
   const MOUNT_ID = "wh-estimator";
   const STORAGE_KEY = "wh_estimator_routing_state";
+  const ATTRIBUTION_STORAGE_KEY = "wh_estimator_attribution";
+  const ATTRIBUTION_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
   const STATE_SCHEMA_VERSION = 2;
   const STATE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
   const PROGRESS_COUNTED_TYPES = new Set(["single_select", "multi_select", "form", "summary"]);
@@ -32,6 +34,8 @@
     "municipality_city",
     "municipality_found"
   ]);
+  const UTM_PARAMS = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"];
+  const CLICK_ID_PARAMS = ["gclid", "gbraid", "wbraid", "msclkid", "fbclid", "ttclid"];
 
   /* ---------------- Helpers ---------------- */
   const qs = (sel, root = document) => root.querySelector(sel);
@@ -257,6 +261,17 @@
     return await res.json();
   }
 
+  function addCacheBuster(url, key = "wh_v") {
+    try {
+      const parsed = new URL(url, location.href);
+      parsed.searchParams.set(key, Date.now().toString(36));
+      return parsed.toString();
+    } catch {
+      const separator = String(url || "").includes("?") ? "&" : "?";
+      return `${url}${separator}${key}=${Date.now().toString(36)}`;
+    }
+  }
+
   let MUNICACHE = null;
   async function loadMunicipalities() {
     if (MUNICACHE) return MUNICACHE;
@@ -275,6 +290,131 @@
     const req = cfg?.pricing?.exact_requires || ["addr_street", "addr_city", "addr_state", "addr_zip"];
     const parts = req.map((k) => safeStr(answers[k]).toLowerCase());
     return parts.join("|");
+  }
+
+  /* ---------------- Attribution ---------------- */
+  function readAttributionStore() {
+    try {
+      const raw = localStorage.getItem(ATTRIBUTION_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      const updatedAt = Number(parsed?.updatedAt || 0);
+      if (!parsed || !updatedAt || Date.now() - updatedAt > ATTRIBUTION_MAX_AGE_MS) {
+        localStorage.removeItem(ATTRIBUTION_STORAGE_KEY);
+        return {};
+      }
+      return parsed;
+    } catch {
+      return {};
+    }
+  }
+
+  function saveAttributionStore(store) {
+    try {
+      localStorage.setItem(ATTRIBUTION_STORAGE_KEY, JSON.stringify({ ...store, updatedAt: Date.now() }));
+    } catch {
+      // Attribution is useful but should never block the quiz.
+    }
+  }
+
+  function getUrlHost(value) {
+    try {
+      return value ? new URL(value).hostname.replace(/^www\./i, "").toLowerCase() : "";
+    } catch {
+      return "";
+    }
+  }
+
+  function getCurrentUrlParams() {
+    try {
+      return new URL(location.href).searchParams;
+    } catch {
+      return new URLSearchParams();
+    }
+  }
+
+  function getParamMap(params, keys) {
+    return keys.reduce((out, key) => {
+      const value = safeStr(params.get(key));
+      if (value) out[key] = value;
+      return out;
+    }, {});
+  }
+
+  function hostMatches(host, patterns) {
+    return patterns.some((pattern) => host === pattern || host.endsWith(`.${pattern}`));
+  }
+
+  function classifyAttribution({ utms, clickIds, referrerHost }) {
+    const source = safeStr(utms.utm_source).toLowerCase();
+    const medium = safeStr(utms.utm_medium).toLowerCase().replace(/[-\s]+/g, "_");
+    const hasPaidSearchClick = Boolean(clickIds.gclid || clickIds.gbraid || clickIds.wbraid || clickIds.msclkid);
+    const hasPaidSocialClick = Boolean(clickIds.fbclid || clickIds.ttclid);
+    const paidMediums = new Set(["cpc", "ppc", "paid", "paid_search", "sem"]);
+    const socialPaidMediums = new Set(["paid_social", "paidsocial", "social_paid", "paid_social_media"]);
+    const searchHosts = ["google.com", "bing.com", "yahoo.com", "duckduckgo.com", "ecosia.org", "ask.com", "aol.com", "baidu.com", "yandex.com"];
+    const socialHosts = ["facebook.com", "instagram.com", "tiktok.com", "linkedin.com", "twitter.com", "x.com", "pinterest.com", "reddit.com", "youtube.com"];
+    const searchSources = ["google", "bing", "yahoo", "duckduckgo", "ecosia"];
+    const socialSources = ["facebook", "instagram", "tiktok", "linkedin", "twitter", "x", "pinterest", "reddit", "youtube"];
+
+    if (hasPaidSearchClick || paidMediums.has(medium) || medium.includes("paid_search")) return "paid_search";
+    if (hasPaidSocialClick || socialPaidMediums.has(medium) || (medium.includes("paid") && socialSources.includes(source))) return "paid_social";
+    if (medium === "organic" || (!medium && hostMatches(referrerHost, searchHosts)) || (medium === "search" && searchSources.includes(source))) return "organic_search";
+    if (medium === "social" || (!medium && hostMatches(referrerHost, socialHosts)) || socialSources.includes(source)) return "organic_social";
+    if (safeStr(referrerHost)) return "referral";
+    return "direct";
+  }
+
+  function buildCurrentAttributionTouch() {
+    const params = getCurrentUrlParams();
+    const utms = getParamMap(params, UTM_PARAMS);
+    const clickIds = getParamMap(params, CLICK_ID_PARAMS);
+    const referrer = document.referrer || "";
+    const referrerHost = getUrlHost(referrer);
+    const currentHost = getUrlHost(location.href);
+    const externalReferrer = referrerHost && referrerHost !== currentHost ? referrer : "";
+    const externalReferrerHost = externalReferrer ? referrerHost : "";
+    const channel = classifyAttribution({ utms, clickIds, referrerHost: externalReferrerHost });
+
+    return {
+      channel,
+      source: utms.utm_source || externalReferrerHost || (channel === "direct" ? "direct" : ""),
+      medium: utms.utm_medium || (channel === "direct" ? "direct" : channel.replace(/^organic_/, "organic_").replace(/^paid_/, "paid_")),
+      campaign: utms.utm_campaign || "",
+      term: utms.utm_term || "",
+      content: utms.utm_content || "",
+      utms,
+      clickIds,
+      referrer: externalReferrer,
+      referrerHost: externalReferrerHost,
+      pageUrl: location.href,
+      landingPageUrl: location.href,
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  function hasMeaningfulAttribution(touch) {
+    return Boolean(
+      Object.keys(touch.utms || {}).length ||
+      Object.keys(touch.clickIds || {}).length ||
+      touch.referrerHost
+    );
+  }
+
+  function getAttribution() {
+    const current = buildCurrentAttributionTouch();
+    const store = readAttributionStore();
+    const meaningful = hasMeaningfulAttribution(current);
+    const nextStore = { ...store };
+
+    if (!nextStore.firstTouch) nextStore.firstTouch = current;
+    if (!nextStore.lastTouch || meaningful) nextStore.lastTouch = current;
+    if (meaningful || !store.firstTouch || !store.lastTouch) saveAttributionStore(nextStore);
+
+    return {
+      current,
+      firstTouch: nextStore.firstTouch || current,
+      lastTouch: nextStore.lastTouch || current
+    };
   }
 
   /* ---------------- State ---------------- */
@@ -423,7 +563,19 @@
   }
 
   function getServiceAreaConfig(cfg, sharedServiceArea) {
-    return { ...(sharedServiceArea || {}), ...(cfg.serviceArea || {}) };
+    const shared = sharedServiceArea || {};
+    const local = cfg.serviceArea || {};
+    const merged = { ...shared, ...local };
+
+    if (Array.isArray(shared.allowedZips) && (!Array.isArray(local.allowedZips) || !local.allowedZips.length)) {
+      merged.allowedZips = shared.allowedZips;
+    }
+
+    if (Array.isArray(shared.allowedZipPrefixes) && (!Array.isArray(local.allowedZipPrefixes) || !local.allowedZipPrefixes.length)) {
+      merged.allowedZipPrefixes = shared.allowedZipPrefixes;
+    }
+
+    return merged;
   }
 
   function getServiceAreaStatus(cfg, answers, features, sharedServiceArea) {
@@ -434,9 +586,20 @@
     const allowedZipPrefixes = (serviceArea.allowedZipPrefixes || []).map((prefix) => String(prefix || "").trim()).filter(Boolean);
 
     if (!allowedZips.length && !allowedZipPrefixes.length) {
+      if (serviceArea.loadFailed) {
+        return {
+          checked: true,
+          eligible: true,
+          zip: normalizeZip(answers.addr_zip),
+          reason: "service_area_load_failed",
+          title: serviceArea.outOfAreaTitle || "We could not verify your service area",
+          message: serviceArea.outOfAreaMessage || "Please try again or contact us directly."
+        };
+      }
+
       return {
         checked: true,
-        eligible: false,
+        eligible: true,
         zip: normalizeZip(answers.addr_zip),
         reason: "service_area_rules_missing",
         title: serviceArea.outOfAreaTitle || "We could not verify your service area",
@@ -471,19 +634,26 @@
   }
 
   let SERVICE_AREA_CACHE = null;
+  let SERVICE_AREA_PROMISE = null;
   async function loadServiceAreaIfNeeded(features) {
     if (!features.serviceAreaFilter) return null;
     if (SERVICE_AREA_CACHE) return SERVICE_AREA_CACHE;
-    try {
-      SERVICE_AREA_CACHE = await fetchJSON(getServiceAreaUrl());
-    } catch (e) {
-      console.warn("Service area failed to load:", e);
-      SERVICE_AREA_CACHE = {
-        outOfAreaTitle: "We could not verify your service area",
-        outOfAreaMessage: "Please try again or contact us directly."
-      };
+    if (!SERVICE_AREA_PROMISE) {
+      SERVICE_AREA_PROMISE = (async () => {
+        try {
+          SERVICE_AREA_CACHE = await fetchJSON(addCacheBuster(getServiceAreaUrl(), "wh_service_area_v"));
+        } catch (e) {
+          console.warn("Service area failed to load:", e);
+          SERVICE_AREA_CACHE = {
+            loadFailed: true,
+            outOfAreaTitle: "We could not verify your service area",
+            outOfAreaMessage: "Please try again or contact us directly."
+          };
+        }
+        return SERVICE_AREA_CACHE;
+      })();
     }
-    return SERVICE_AREA_CACHE;
+    return SERVICE_AREA_PROMISE;
   }
 
   function buildReadableAnswers(cfg, qmap, answers) {
@@ -819,6 +989,7 @@
     }
 
     const features = getFeatures(cfg);
+    loadServiceAreaIfNeeded(features);
     const state = loadEstimatorState(cfg, qmap);
 
     if (!state.currentId) state.currentId = cfg.start || (cfg.questions?.[0]?.id ?? null);
@@ -1428,6 +1599,7 @@
           scores: selectedResultUsesScoring ? resultOutcome.scores : {}
         } : null,
         serviceArea: serviceAreaStatus || getServiceAreaStatus(cfg, state.answers, features, SERVICE_AREA_CACHE),
+        attribution: getAttribution(),
         pageUrl: location.href,
         submittedAt: new Date().toISOString()
       };
