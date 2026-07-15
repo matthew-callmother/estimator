@@ -1,6 +1,6 @@
 # Estimator
 
-This repo includes a Vercel serverless endpoint at `/api/bookings`.
+This repo now includes a Vercel serverless endpoint at `/api/bookings`.
 
 The estimator submits the final address and contact data to that endpoint, and the endpoint can create a booking in ServiceTitan without exposing ServiceTitan credentials in browser code.
 
@@ -8,51 +8,40 @@ The estimator submits the final address and contact data to that endpoint, and t
 
 Add the environment variables from `.env.example` in your Vercel project settings.
 
-For the live Mother setup, the important values are:
+Start with:
 
-- `SERVICETITAN_ENV=production`
-- `SERVICETITAN_DRY_RUN=false`
-- `SERVICETITAN_TENANT_ID=YOUR_TENANT_ID`
-- `SERVICETITAN_BOOKING_PROVIDER=85648468`
-- `SERVICETITAN_APP_KEY=ak1...`
-- `SERVICETITAN_CLIENT_ID=...`
-- `SERVICETITAN_CLIENT_SECRET=...`
-- `SERVICETITAN_BUSINESS_UNIT_ID=1357`
+- `SERVICETITAN_ENV=integration`
+- `SERVICETITAN_DRY_RUN=true`
 
-Start with `SERVICETITAN_DRY_RUN=true` when checking the browser payload. Change it to `false` only when you want the endpoint to call ServiceTitan.
+After the payload looks right in Vercel logs, change dry run to `false`.
+
+If the estimator script is hosted on the same Vercel project, submissions use `/api/bookings` automatically.
 
 If the estimator script is embedded on Webflow, point the widget at both the estimator config and the Vercel endpoint:
 
 ```html
 <script
-  src="https://matthew-callmother.github.io/estimator/app.js?v=20260522-1"
+  src="https://matthew-callmother.github.io/estimator/app.js"
   data-config-url="https://matthew-callmother.github.io/estimator/config.json"
-  data-booking-endpoint="https://estimator-sage-xi.vercel.app/api/bookings"
-  defer
+  data-booking-endpoint="https://YOUR-VERCEL-PROJECT.vercel.app/api/bookings"
 ></script>
 ```
 
 Future estimators can reuse the same `app.js` by changing only `data-config-url`.
 
+You can also set `window.WH_ESTIMATOR_CONFIG_URL`, `window.WH_ESTIMATOR_MUNICIPALITIES_URL`, or `window.WH_ESTIMATOR_BOOKING_ENDPOINT` before loading `app.js`.
+
 ## ServiceTitan notes
 
 The endpoint uses ServiceTitan OAuth client credentials and sends bookings to the CRM bookings API.
 
-ServiceTitan requires both the access token and `ST-App-Key` on API calls. The Vercel endpoint gets the token server-side, caches it during its lifetime, and sends the app key as a protected server-side header.
-
-Bookings are sent through this route:
+ServiceTitan's CRM docs note that bookings must be enabled/configured on the account before they appear for CSRs. This endpoint sends bookings through the tenant booking-provider route:
 
 ```txt
 POST /crm/v2/tenant/{tenant_id}/booking-provider/{booking_provider}/bookings
 ```
 
-With production values, that becomes:
-
-```txt
-https://api.servicetitan.io/crm/v2/tenant/{tenant_id}/booking-provider/{booking_provider}/bookings
-```
-
-Set `SERVICETITAN_BOOKING_PROVIDER` to the allowed booking provider value, such as `85648468`.
+Set `SERVICETITAN_TENANT_ID` to the tenant ID and `SERVICETITAN_BOOKING_PROVIDER` to the booking provider value, such as `85648468`.
 
 The Vercel endpoint builds the ServiceTitan booking payload. It generates a unique `externalId`, maps phone and email into contacts, defaults country to `USA`, sets customer type to `Residential`, uses business unit `1357`, and sends confirmation email as `false`.
 
@@ -72,3 +61,35 @@ Each estimator config can include optional metadata:
 ```
 
 Vercel remains the authority for ServiceTitan credentials and protected defaults. Config values are only used for safe lead metadata such as service name, campaign label, campaign ID, source, and job type.
+
+## Pricing model
+
+When `features.pricing` is enabled, answer choices can include pricing:
+
+```json
+{
+  "label": "Attic",
+  "pricing": {
+    "exact": 650
+  }
+}
+```
+
+`exact` is the real internal estimate value. The customer-facing low/high range is display strategy, not core math.
+
+Configs can generate the visible range from the exact total:
+
+```json
+{
+  "pricing": {
+    "range": {
+      "low_multiplier": 0.9,
+      "high_multiplier": 1.08,
+      "round_to": 50,
+      "force_generated": true
+    }
+  }
+}
+```
+
+Existing configs that already provide `low` and `high` still work. By default the app can respect explicit ranges, but `force_generated: true` tells the app to ignore those values for display and generate the range from `exact`.

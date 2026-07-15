@@ -1,0 +1,241 @@
+{
+  "meta": {
+    "estimatorId": "cast-iron-pipe-cost",
+    "serviceName": "Cast iron sewer pipe cost estimate",
+    "version": "test-v1",
+    "currency": "USD",
+    "sourceUrl": "https://www.callmother.com/blogs/dallas-sewer-line-repair-replacement-cost-guide"
+  },
+  "estimatorId": "cast-iron-pipe-cost",
+  "quizName": "Cast Iron Sewer Pipe Cost Estimator",
+  "serviceName": "Cast iron sewer pipe cost estimate",
+  "defaultCountry": "United States",
+  "campaign": "Cast Iron Pipe Cost Estimator",
+  "features": {
+    "pricing": true,
+    "permitLookup": false,
+    "serviceAreaFilter": false,
+    "serviceTitanBooking": false,
+    "recommendations": false
+  },
+  "pricing": {
+    "range": {
+      "prefer_explicit": true,
+      "force_generated": false,
+      "round_to": 50
+    },
+    "safety": {
+      "round_to": 50
+    }
+  },
+  "start": "intro",
+  "questions": [
+    {
+      "id": "intro",
+      "type": "content",
+      "title": "Cast Iron Sewer Pipe Cost Estimator",
+      "subtitle": "Use a few project details to estimate a Dallas sewer repair or replacement range.",
+      "html": "<p>This test estimator uses Mother's Dallas sewer replacement cost guide as its pricing baseline. It is not a camera inspection or final quote.</p>",
+      "next_label": "Start Estimate",
+      "next": "feet_replaced"
+    },
+    {
+      "id": "feet_replaced",
+      "type": "slider",
+      "title": "How many feet of sewer line are involved?",
+      "subtitle": "A rough linear-foot estimate is enough for this test.",
+      "label": "Pipe length",
+      "min": 10,
+      "max": 120,
+      "step": 5,
+      "default": 50,
+      "unit": "ft",
+      "next": "replacement_method"
+    },
+    {
+      "id": "replacement_method",
+      "type": "single_select",
+      "title": "Which repair or replacement method sounds closest?",
+      "subtitle": "Pick the best match. A plumber would confirm this with a camera inspection.",
+      "options": [
+        {
+          "value": "partial_excavation",
+          "label": "Partial excavation replacement",
+          "description": "Usually for a damaged section up to about 50 feet.",
+          "pricing": {
+            "quantity_answer_id": "feet_replaced",
+            "base_low": 5000,
+            "low_per_unit": 48,
+            "base_high": 9000,
+            "high_per_unit": 150,
+            "base_exact": 7000,
+            "exact_per_unit": 100
+          },
+          "next": "access_complexity"
+        },
+        {
+          "value": "full_excavation",
+          "label": "Full sewer line replacement",
+          "description": "Usually for long runs, broad deterioration, collapse, or failed cast iron/clay.",
+          "pricing": {
+            "quantity_answer_id": "feet_replaced",
+            "base_low": 7000,
+            "low_per_unit": 160,
+            "base_high": 18000,
+            "high_per_unit": 255,
+            "base_exact": 12500,
+            "exact_per_unit": 180
+          },
+          "next": "access_complexity"
+        },
+        {
+          "value": "reroute",
+          "label": "Sewer reroute",
+          "description": "A new route around the slab, hardscaping, or recurring problem area.",
+          "pricing": {
+            "quantity_answer_id": "feet_replaced",
+            "base_low": 4500,
+            "low_per_unit": 52,
+            "base_high": 10500,
+            "high_per_unit": 122.5,
+            "base_exact": 7500,
+            "exact_per_unit": 85
+          },
+          "next": "access_complexity"
+        },
+        {
+          "value": "cipp_lining",
+          "label": "CIPP sewer lining",
+          "description": "Trenchless liner. Not always available for collapsed or badly deformed cast iron.",
+          "pricing": {
+            "quantity_answer_id": "feet_replaced",
+            "low_per_unit": 135,
+            "high_per_unit": 225,
+            "exact_per_unit": 180
+          },
+          "next": "access_complexity"
+        },
+        {
+          "value": "pipe_bursting",
+          "label": "Pipe bursting",
+          "description": "Trenchless replacement that can fit some corroded cast iron or smaller collapsed sections.",
+          "pricing": {
+            "quantity_answer_id": "feet_replaced",
+            "low_per_unit": 165,
+            "high_per_unit": 245,
+            "exact_per_unit": 205
+          },
+          "next": "access_complexity"
+        },
+        {
+          "value": "not_sure",
+          "label": "I'm not sure yet",
+          "description": "Use the broad Dallas sewer replacement range until a camera inspection narrows it.",
+          "pricing": {
+            "low": 7400,
+            "high": 48600,
+            "exact": 20000
+          },
+          "next": "access_complexity"
+        }
+      ]
+    },
+    {
+      "id": "access_complexity",
+      "type": "single_select",
+      "title": "How hard is the pipe to access?",
+      "subtitle": "Excavation, hardscaping, depth, and slab proximity can materially change labor.",
+      "options": [
+        {
+          "value": "clear_yard",
+          "label": "Clear yard access",
+          "description": "No major hardscaping, slab, pool, or mature landscaping in the way.",
+          "pricing": { "low": 0, "high": 0, "exact": 0 },
+          "next": "permit_scope"
+        },
+        {
+          "value": "landscaping_or_depth",
+          "label": "Mature landscaping or deeper pipe",
+          "description": "More careful digging or remediation may be needed.",
+          "pricing": { "low": 1200, "high": 3500, "exact": 2500 },
+          "next": "permit_scope"
+        },
+        {
+          "value": "hardscape",
+          "label": "Patio, driveway, pool, or deck nearby",
+          "description": "Hardscaping increases labor, planning, and restoration time.",
+          "pricing": { "low": 3000, "high": 8500, "exact": 6000 },
+          "next": "permit_scope"
+        },
+        {
+          "value": "near_slab",
+          "label": "Near or under the slab foundation",
+          "description": "Precision tunneling or rerouting may be needed.",
+          "pricing": { "low": 5000, "high": 15000, "exact": 10000 },
+          "next": "permit_scope"
+        },
+        {
+          "value": "not_sure",
+          "label": "I'm not sure",
+          "description": "Use a moderate access allowance until the line is inspected.",
+          "pricing": { "low": 1500, "high": 7000, "exact": 4000 },
+          "next": "permit_scope"
+        }
+      ]
+    },
+    {
+      "id": "permit_scope",
+      "type": "single_select",
+      "title": "What permit situation sounds closest?",
+      "subtitle": "Dallas sewer work commonly requires permits and inspection fees.",
+      "options": [
+        {
+          "value": "standard_residential",
+          "label": "Standard residential sewer permit",
+          "description": "Typical residential permit and inspection allowance.",
+          "pricing": { "low": 600, "high": 1800, "exact": 1200 },
+          "next": "results_preview"
+        },
+        {
+          "value": "larger_project",
+          "label": "Larger project permit",
+          "description": "Bigger jobs tend to land toward the higher end of Dallas permit costs.",
+          "pricing": { "low": 1400, "high": 1800, "exact": 1600 },
+          "next": "results_preview"
+        },
+        {
+          "value": "excavation_permit",
+          "label": "Excavation or right-of-way permit may apply",
+          "description": "Use this when street, alley, or extended excavation permitting may be involved.",
+          "pricing": { "low": 3425, "high": 4625, "exact": 3800 },
+          "next": "results_preview"
+        },
+        {
+          "value": "not_sure",
+          "label": "I'm not sure",
+          "description": "Use a broad Dallas permit allowance.",
+          "pricing": { "low": 600, "high": 4625, "exact": 1800 },
+          "next": "results_preview"
+        }
+      ]
+    },
+    {
+      "id": "results_preview",
+      "type": "summary",
+      "title": "Your sewer replacement estimate",
+      "subtitle": "Review the test estimate before finishing.",
+      "next_label": "Finish Test",
+      "next": "submit"
+    },
+    {
+      "id": "submit",
+      "type": "submit",
+      "title": "Test complete",
+      "subtitle": "This test estimator does not submit a ServiceTitan booking.",
+      "submit_label": "Finish"
+    }
+  ],
+  "result_copy": {
+    "disclaimer": "This is a planning estimate based on Mother's Dallas sewer line replacement cost guide. A camera inspection and site visit are required for a final quote."
+  }
+}

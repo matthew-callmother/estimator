@@ -30,6 +30,12 @@
       "addr_state",
       "addr_zip"
     ],
+    "range": {
+      "low_multiplier": 0.9,
+      "high_multiplier": 1.08,
+      "round_to": 50,
+      "force_generated": true
+    },
     "safety": {
       "round_to": 25
     },

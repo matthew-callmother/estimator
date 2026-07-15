@@ -114,7 +114,9 @@ Use this process before thinking about JSON.
 7. Give every result a tie priority and tie-breaker reason.
 8. Decide whether the quiz needs optional features like ZIP screening, lead capture, pricing, or permit lookup.
 9. Ask ChatGPT to convert the outline into JSON using this guide.
-10. Test the JSON with the app before publishing.
+10. Test the JSON with the app.
+11. Run the quiz photo image generation workflow to create a cover image and one image per result.
+12. Add the generated `image_url` values to the config before publishing.
 
 ## Google Doc Template
 
@@ -450,6 +452,61 @@ Use it when multiple things can be true at once, like:
 
 For multi-select questions, prefer putting `next` on the question itself, not on each answer. That keeps the path clear after the user chooses several options.
 
+### Slider
+
+Use `slider` when the customer should choose a discrete number from a controlled range.
+
+Use it for estimator-style inputs like:
+
+- feet of pipe being replaced
+- number of fixtures
+- number of rooms
+- number of panels
+- quantity of add-ons
+
+Sliders are discrete, not continuous. The `step` controls the allowed increments.
+
+```json
+{
+  "id": "feet_replaced",
+  "type": "slider",
+  "title": "How many feet are being replaced?",
+  "subtitle": "A rough estimate is fine.",
+  "label": "Pipe length",
+  "min": 10,
+  "max": 120,
+  "step": 5,
+  "default": 40,
+  "unit": "ft",
+  "pricing": {
+    "exact_per_unit": 125
+  },
+  "next": "next_question"
+}
+```
+
+Slider pricing is generic:
+
+- `exact_per_unit`: multiplies the selected slider value by this amount.
+- `base_exact`: optional fixed amount added before the per-unit math.
+
+Example:
+
+```json
+"pricing": {
+  "base_exact": 500,
+  "exact_per_unit": 125
+}
+```
+
+If the customer selects `40 ft`, the exact estimate contribution is:
+
+```txt
+500 + (40 * 125) = 5500
+```
+
+Slider answers are included in the readable quiz answer summary using the configured `unit`.
+
 ### Form
 
 Use `form` to collect ZIP code, contact info, address, or other typed answers.
@@ -707,6 +764,92 @@ Pricing configs can include base prices and answer-level adjustments. Basic quiz
 
 When pricing is enabled, pricing data is included in the customer-facing estimate and in the ServiceTitan lead summary.
 
+The pricing model is intentionally generic. The app does not need to know what service is being estimated.
+
+Use `exact` as the real estimate value:
+
+```json
+{
+  "value": "attic",
+  "label": "Attic",
+  "pricing": {
+    "exact": 650
+  }
+}
+```
+
+The visible low/high range is mostly a customer-facing display range. It keeps the customer engaged before the app has enough information to show a final exact number.
+
+The app can generate that range from the exact total:
+
+```json
+"pricing": {
+  "range": {
+    "low_multiplier": 0.9,
+    "high_multiplier": 1.08,
+    "round_to": 50,
+    "force_generated": true
+  }
+}
+```
+
+Meaning:
+
+- `low_multiplier`: creates the low side of the displayed range from the exact total.
+- `high_multiplier`: creates the high side of the displayed range from the exact total.
+- `round_to`: rounds displayed prices to a clean increment.
+- `force_generated`: ignores explicit `low` and `high` values and generates the display range from `exact`.
+
+Existing configs may still include explicit `low` and `high`:
+
+```json
+"pricing": {
+  "low": 450,
+  "high": 650,
+  "exact": 650
+}
+```
+
+That still works. For new configs, prefer starting with `exact` plus a top-level generated range unless a specific answer truly needs a custom displayed range.
+
+Answer choices can also multiply pricing by a slider or numeric answer. Use this when one slider controls quantity and a later answer controls the method.
+
+```json
+{
+  "value": "pipe_bursting",
+  "label": "Pipe bursting",
+  "pricing": {
+    "quantity_answer_id": "feet_replaced",
+    "low_per_unit": 165,
+    "high_per_unit": 245,
+    "exact_per_unit": 205
+  }
+}
+```
+
+If `feet_replaced` is `50`, the explicit displayed range contribution is:
+
+```txt
+50 * 165 = 8250
+50 * 245 = 12250
+```
+
+The exact estimate contribution is:
+
+```txt
+50 * 205 = 10250
+```
+
+You can also add base amounts:
+
+```json
+"pricing": {
+  "quantity_answer_id": "feet_replaced",
+  "base_exact": 5000,
+  "exact_per_unit": 125
+}
+```
+
 ### Permit Lookup
 
 Permit lookup is only used when:
@@ -803,6 +946,7 @@ The current app already supports:
 
 - `single_select` questions
 - `multi_select` questions
+- `slider` questions
 - `form` questions
 - ZIP/service-area screening
 - optional pricing
@@ -850,6 +994,7 @@ Check:
 - ZIP screening is included if the quiz needs service-area filtering
 - lead capture is included if the quiz needs ServiceTitan
 - pricing and permit lookup are only enabled when truly needed
+- cover/result images have been generated and optimized when the quiz needs visuals
 
 ## Prompt For ChatGPT
 

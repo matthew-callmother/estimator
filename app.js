@@ -16,7 +16,7 @@
   const ATTRIBUTION_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
   const STATE_SCHEMA_VERSION = 2;
   const STATE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
-  const PROGRESS_COUNTED_TYPES = new Set(["single_select", "multi_select", "form", "summary"]);
+  const PROGRESS_COUNTED_TYPES = new Set(["single_select", "multi_select", "slider", "form", "summary"]);
   const CANONICAL_LEAD_FIELD_IDS = new Set([
     "contact_name",
     "contact_phone",
@@ -684,6 +684,17 @@
         });
       }
 
+      if (q.type === "slider") {
+        const value = answers[q.id];
+        if (isEmpty(value)) continue;
+        readable.push({
+          questionId: q.id,
+          question: q.title || q.id,
+          value: normalizeSliderValue(q, value),
+          answer: formatSliderValue(q, value)
+        });
+      }
+
       if (q.type === "form") {
         for (const field of (q.fields || [])) {
           if (CANONICAL_LEAD_FIELD_IDS.has(field.id)) continue;
@@ -713,6 +724,38 @@
 
   function uniqueValues(values) {
     return [...new Set(values.filter(Boolean))];
+  }
+
+  function getSliderConfig(q) {
+    const min = Number(q.min ?? 0) || 0;
+    const max = Number(q.max ?? Math.max(min, 100)) || Math.max(min, 100);
+    const step = Math.max(Number(q.step ?? 1) || 1, 1);
+    const defaultValue = Number(q.default ?? q.default_value ?? q.defaultValue ?? min);
+
+    return {
+      min,
+      max: Math.max(min, max),
+      step,
+      defaultValue
+    };
+  }
+
+  function normalizeSliderValue(q, rawValue) {
+    const slider = getSliderConfig(q);
+    const raw = Number(rawValue);
+    const fallback = Number.isFinite(slider.defaultValue) ? slider.defaultValue : slider.min;
+    const value = Number.isFinite(raw) ? raw : fallback;
+    const clamped = Math.min(slider.max, Math.max(slider.min, value));
+    const stepsFromMin = Math.round((clamped - slider.min) / slider.step);
+    const snapped = slider.min + (stepsFromMin * slider.step);
+
+    return Math.min(slider.max, Math.max(slider.min, snapped));
+  }
+
+  function formatSliderValue(q, value) {
+    const unit = q.unit || q.unit_label || q.unitLabel || "";
+    const suffix = unit ? ` ${unit}` : "";
+    return `${normalizeSliderValue(q, value)}${suffix}`;
   }
 
   function getAllNextQuestionIds(q, cfg) {
@@ -857,9 +900,102 @@
   }
 
   /* ---------------- Pricing ---------------- */
-  function sumPricing(cfg, qmap, state) {
-    let low = 0, high = 0, exact = 0;
-    const selectedOptionPricing = [];
+  function getPriceConfig(cfg) {
+    const pricing = cfg?.pricing || {};
+    const range = pricing.range || {};
+    const safety = pricing.safety || {};
+
+    return {
+      roundTo: Number(range.round_to ?? range.roundTo ?? safety.round_to ?? safety.roundTo ?? 25) || 25,
+      lowMultiplier: Number(range.low_multiplier ?? range.lowMultiplier ?? range.lowPercent ?? 0.9) || 0.9,
+      highMultiplier: Number(range.high_multiplier ?? range.highMultiplier ?? range.highPercent ?? 1.08) || 1.08,
+      preferExplicitRange: range.prefer_explicit !== false && range.preferExplicit !== false,
+      forceGeneratedRange: range.force_generated === true || range.forceGenerated === true
+    };
+  }
+
+  function roundPrice(value, roundTo) {
+    const amount = Number(value) || 0;
+    const increment = Number(roundTo) || 25;
+    return Math.round(amount / increment) * increment;
+  }
+
+  function getOptionPrice(opt, answers) {
+    const price = opt?.pricing || opt?.price || null;
+    if (!price) return null;
+
+    const quantityAnswerId = price.quantity_answer_id || price.quantityAnswerId;
+    const quantity = quantityAnswerId ? (Number(answers?.[quantityAnswerId]) || 0) : 1;
+    const exactPerUnit = Number(price.exact_per_unit ?? price.exactPerUnit ?? price.per_unit ?? price.perUnit ?? 0) || 0;
+    const baseExact = Number(price.base_exact ?? price.baseExact ?? 0) || 0;
+    const fixedExact = exactPerUnit ? 0 : (Number(price.exact ?? price.high ?? price.low ?? 0) || 0);
+    const hasLow = price.low !== undefined && price.low !== null;
+    const hasHigh = price.high !== undefined && price.high !== null;
+    const hasLowPerUnit = price.low_per_unit !== undefined || price.lowPerUnit !== undefined;
+    const hasHighPerUnit = price.high_per_unit !== undefined || price.highPerUnit !== undefined;
+    const exact = baseExact + fixedExact + (quantity * exactPerUnit);
+    const low = hasLowPerUnit
+      ? (Number(price.base_low ?? price.baseLow ?? 0) || 0) + (quantity * (Number(price.low_per_unit ?? price.lowPerUnit) || 0))
+      : hasLow
+        ? Number(price.low) || 0
+        : null;
+    const high = hasHighPerUnit
+      ? (Number(price.base_high ?? price.baseHigh ?? 0) || 0) + (quantity * (Number(price.high_per_unit ?? price.highPerUnit) || 0))
+      : hasHigh
+        ? Number(price.high) || 0
+        : null;
+
+    return {
+      exact,
+      low,
+      high,
+      quantity,
+      hasExplicitRange: hasLow && hasHigh
+        || (hasLowPerUnit && hasHighPerUnit)
+    };
+  }
+
+  function getSliderPrice(q, value) {
+    const price = q?.pricing || q?.price || null;
+    if (!price) return null;
+
+    const quantity = normalizeSliderValue(q, value);
+    const exactPerUnit = Number(price.exact_per_unit ?? price.exactPerUnit ?? price.per_unit ?? price.perUnit ?? 0) || 0;
+    const baseExact = Number(price.base_exact ?? price.baseExact ?? 0) || 0;
+    const fixedExact = exactPerUnit ? 0 : (Number(price.exact ?? 0) || 0);
+    const exact = baseExact + fixedExact + (quantity * exactPerUnit);
+
+    const hasLowPerUnit = price.low_per_unit !== undefined || price.lowPerUnit !== undefined;
+    const hasHighPerUnit = price.high_per_unit !== undefined || price.highPerUnit !== undefined;
+    const hasLow = price.low !== undefined && price.low !== null;
+    const hasHigh = price.high !== undefined && price.high !== null;
+    const low = hasLowPerUnit
+      ? (Number(price.base_low ?? price.baseLow ?? 0) || 0) + (quantity * (Number(price.low_per_unit ?? price.lowPerUnit) || 0))
+      : hasLow
+        ? Number(price.low) || 0
+        : null;
+    const high = hasHighPerUnit
+      ? (Number(price.base_high ?? price.baseHigh ?? 0) || 0) + (quantity * (Number(price.high_per_unit ?? price.highPerUnit) || 0))
+      : hasHigh
+        ? Number(price.high) || 0
+        : null;
+
+    return {
+      exact,
+      low,
+      high,
+      quantity,
+      hasExplicitRange: low !== null && high !== null
+    };
+  }
+
+  function calculatePrice(cfg, qmap, state) {
+    let exact = 0;
+    let explicitLow = 0;
+    let explicitHigh = 0;
+    let hasPricedItems = false;
+    let hasMissingRange = false;
+    const items = [];
 
     for (const q of (cfg.questions || [])) {
       if (q.type !== "single_select" && q.type !== "multi_select") continue;
@@ -871,35 +1007,202 @@
         if (isEmpty(v)) continue;
 
         const opt = getOption(q, v);
-        if (!opt || (!opt.pricing && !opt.price)) continue; // FIX: allow either key
+        const price = getOptionPrice(opt, state.answers);
+        if (!opt || !price) continue;
 
-        const p = opt.pricing || opt.price || {};
-        const l = Number(p.low ?? 0) || 0;
-        const h = Number(p.high ?? l) || 0;
-        const e = Number(p.exact ?? h) || 0;
+        hasPricedItems = true;
+        exact += price.exact;
 
-        low += l;
-        high += h;
-        exact += e;
+        if (price.hasExplicitRange) {
+          explicitLow += price.low;
+          explicitHigh += price.high;
+        } else {
+          hasMissingRange = true;
+        }
 
-        selectedOptionPricing.push({ qid: q.id, value: v, low: l, high: h, exact: e });
+        items.push({
+          qid: q.id,
+          questionId: q.id,
+          question: q.title || q.id,
+          value: v,
+          label: opt.label || opt.value || String(v),
+          exact: price.exact,
+          low: price.low,
+          high: price.high,
+          quantity: price.quantity,
+          hasExplicitRange: price.hasExplicitRange,
+          source: "answer"
+        });
       }
+    }
+
+    for (const q of (cfg.questions || [])) {
+      if (q.type !== "slider") continue;
+      if (isEmpty(state.answers[q.id])) continue;
+
+      const price = getSliderPrice(q, state.answers[q.id]);
+      if (!price) continue;
+
+      hasPricedItems = true;
+      exact += price.exact;
+
+      if (price.hasExplicitRange) {
+        explicitLow += price.low;
+        explicitHigh += price.high;
+      } else {
+        hasMissingRange = true;
+      }
+
+      items.push({
+        qid: q.id,
+        questionId: q.id,
+        question: q.title || q.id,
+        value: price.quantity,
+        label: formatSliderValue(q, price.quantity),
+        exact: price.exact,
+        low: price.low,
+        high: price.high,
+        hasExplicitRange: price.hasExplicitRange,
+        source: "slider"
+      });
     }
 
     if (state.meta.permit_done && state.meta.permit_sig === computeAddressSig(cfg, state.answers)) {
       const fee = Number(state.answers.permit_fee_usd || 0) || 0;
-      low += fee; high += fee; exact += fee;
+      if (fee) {
+        exact += fee;
+        explicitLow += fee;
+        explicitHigh += fee;
+        items.push({
+          qid: "permit_fee_usd",
+          questionId: "permit_fee_usd",
+          question: "Permit",
+          value: "permit_fee",
+          label: "Permit fee",
+          exact: fee,
+          low: fee,
+          high: fee,
+          hasExplicitRange: true,
+          source: "permit"
+        });
+      }
 
       if (state.answers.expansion_tank_required === true) {
         const addon = Number(cfg?.pricing?.lookup_addons?.expansion_tank_required || 0) || 0;
-        low += addon; high += addon; exact += addon;
+        if (addon) {
+          exact += addon;
+          explicitLow += addon;
+          explicitHigh += addon;
+          items.push({
+            qid: "expansion_tank_required",
+            questionId: "expansion_tank_required",
+            question: "Code requirement",
+            value: "expansion_tank_required",
+            label: "Expansion tank required",
+            exact: addon,
+            low: addon,
+            high: addon,
+            hasExplicitRange: true,
+            source: "permit"
+          });
+        }
       }
     }
 
-    const roundTo = Number(cfg?.pricing?.safety?.round_to || 25) || 25;
-    const round = (n) => Math.round(n / roundTo) * roundTo;
+    return {
+      exact,
+      explicitLow,
+      explicitHigh,
+      hasPricedItems,
+      hasCompleteExplicitRange: hasPricedItems && !hasMissingRange,
+      items
+    };
+  }
 
-    return { low: round(low), high: round(high), exact: round(exact), items: selectedOptionPricing };
+  function generatePriceRange(cfg, price) {
+    const priceConfig = getPriceConfig(cfg);
+    const exact = roundPrice(price?.exact || 0, priceConfig.roundTo);
+    const canUseExplicitRange =
+      priceConfig.preferExplicitRange &&
+      !priceConfig.forceGeneratedRange &&
+      price?.hasCompleteExplicitRange;
+
+    if (!exact) {
+      return { low: 0, high: 0, exact, source: "empty" };
+    }
+
+    if (canUseExplicitRange) {
+      const low = roundPrice(price.explicitLow, priceConfig.roundTo);
+      const high = roundPrice(price.explicitHigh, priceConfig.roundTo);
+      return {
+        low: Math.min(low, high),
+        high: Math.max(low, high),
+        exact,
+        source: "explicit"
+      };
+    }
+
+    const low = roundPrice(exact * priceConfig.lowMultiplier, priceConfig.roundTo);
+    const high = roundPrice(exact * priceConfig.highMultiplier, priceConfig.roundTo);
+    return {
+      low: Math.min(low, high),
+      high: Math.max(low, high),
+      exact,
+      source: "generated"
+    };
+  }
+
+  function sumPricing(cfg, qmap, state) {
+    const price = calculatePrice(cfg, qmap, state);
+    const range = generatePriceRange(cfg, price);
+
+    return {
+      low: range.low,
+      high: range.high,
+      exact: range.exact,
+      items: price.items,
+      range,
+      price
+    };
+  }
+
+  function getPriceDisplayState(cfg, state, pricing) {
+    const disclaimer = cfg?.result_copy?.disclaimer || "";
+    const addrSig = computeAddressSig(cfg, state.answers);
+    const afterAddressSubmit = state.meta.address_submitted_sig && state.meta.address_submitted_sig === addrSig;
+    const exactReady =
+      afterAddressSubmit &&
+      state.meta.permit_done &&
+      state.meta.permit_sig === addrSig;
+    const isOnAddressGate = state.currentId === cfg.address_gate_id;
+
+    if (!pricing || (pricing.low === 0 && pricing.high === 0 && pricing.exact === 0)) {
+      return {
+        mode: "empty",
+        label: "Estimated Range",
+        value: "-",
+        sub: "Answer a few questions to see your range.",
+        disclaimer
+      };
+    }
+
+    if (exactReady && !isOnAddressGate) {
+      return {
+        mode: "exact",
+        label: "Exact Total",
+        value: `$${money(pricing.exact)}`,
+        sub: "Exact price shown after address verification.",
+        disclaimer
+      };
+    }
+
+    return {
+      mode: "range",
+      label: "Estimated Range",
+      value: `$${money(pricing.low)}-$${money(pricing.high)}`,
+      sub: "Range updates as you go. Add your address to get an exact number.",
+      disclaimer
+    };
   }
 
   /* ---------------- Validation ---------------- */
@@ -934,6 +1237,8 @@
       const min = Number(q.min_selected ?? q.minSelected ?? 1) || 1;
       return values.length >= min;
     }
+
+    if (q.type === "slider") return !isEmpty(answers[q.id]);
 
     if (q.type === "form") {
       for (const f of q.fields || []) {
@@ -1078,27 +1383,7 @@
     }
 
     function computePreviewLabel(pr) {
-      const disclaimer = cfg?.result_copy?.disclaimer || "";
-
-      const addrSig = computeAddressSig(cfg, state.answers);
-      const afterAddressSubmit = state.meta.address_submitted_sig && state.meta.address_submitted_sig === addrSig;
-
-      const exactReady =
-        afterAddressSubmit &&
-        state.meta.permit_done &&
-        state.meta.permit_sig === addrSig;
-
-      const isOnAddressGate = state.currentId === cfg.address_gate_id;
-
-      if (exactReady && !isOnAddressGate) {
-        return { mode: "exact", label: "Exact Total", value: `$${money(pr.exact)}`, sub: "Exact price shown after address verification.", disclaimer };
-      }
-
-      if (pr.low === 0 && pr.high === 0) {
-        return { mode: "empty", label: "Estimated Range", value: "-", sub: "Answer a few questions to see your range.", disclaimer };
-      }
-
-      return { mode: "range", label: "Estimated Range", value: `$${money(pr.low)}-$${money(pr.high)}`, sub: "Range updates as you go. Add your address to get an exact number.", disclaimer };
+      return getPriceDisplayState(cfg, state, pr);
     }
 
     function setChoiceActive(optionEl, inputEl, active) {
@@ -1246,6 +1531,80 @@
       content.appendChild(wrap);
     }
 
+    function renderSlider(q, content, ui) {
+      const slider = getSliderConfig(q);
+      const currentValue = normalizeSliderValue(q, isEmpty(state.answers[q.id]) ? slider.defaultValue : state.answers[q.id]);
+      state.answers[q.id] = currentValue;
+
+      const valueEl = mk("div", { class: "quiz_slider-value" }, [formatSliderValue(q, currentValue)]);
+      const helpText = q.help || q.description || "";
+      const inputEl = mk("input", {
+        class: "quiz_slider-input",
+        type: "range",
+        min: slider.min,
+        max: slider.max,
+        step: slider.step,
+        value: currentValue,
+        "aria-label": q.title || q.id,
+        onInput: (e) => {
+          const nextValue = normalizeSliderValue(q, e.target.value);
+          e.target.value = nextValue;
+          state.answers[q.id] = nextValue;
+          valueEl.textContent = formatSliderValue(q, nextValue);
+          saveState(state, cfg);
+          ui?.updateNextDisabled();
+          ui?.updatePreview();
+        }
+      });
+
+      const decreaseBtn = mk("button", {
+        class: "quiz_slider-stepper",
+        type: "button",
+        "aria-label": `Decrease ${q.title || q.id}`,
+        onClick: () => {
+          const nextValue = normalizeSliderValue(q, Number(state.answers[q.id]) - slider.step);
+          state.answers[q.id] = nextValue;
+          inputEl.value = nextValue;
+          valueEl.textContent = formatSliderValue(q, nextValue);
+          saveState(state, cfg);
+          ui?.updateNextDisabled();
+          ui?.updatePreview();
+        }
+      }, ["-"]);
+
+      const increaseBtn = mk("button", {
+        class: "quiz_slider-stepper",
+        type: "button",
+        "aria-label": `Increase ${q.title || q.id}`,
+        onClick: () => {
+          const nextValue = normalizeSliderValue(q, Number(state.answers[q.id]) + slider.step);
+          state.answers[q.id] = nextValue;
+          inputEl.value = nextValue;
+          valueEl.textContent = formatSliderValue(q, nextValue);
+          saveState(state, cfg);
+          ui?.updateNextDisabled();
+          ui?.updatePreview();
+        }
+      }, ["+"]);
+
+      content.appendChild(mk("div", { class: "quiz_slider" }, [
+        mk("div", { class: "quiz_slider-top" }, [
+          mk("div", { class: "quiz_slider-label" }, [q.label || q.title || "Amount"]),
+          valueEl
+        ]),
+        mk("div", { class: "quiz_slider-control" }, [decreaseBtn, inputEl, increaseBtn]),
+        mk("div", { class: "quiz_slider-range" }, [
+          mk("span", {}, [formatSliderValue(q, slider.min)]),
+          mk("span", {}, [formatSliderValue(q, slider.max)])
+        ]),
+        helpText ? mk("div", { class: "quiz_slider-help" }, [helpText]) : null
+      ]));
+
+      saveState(state, cfg);
+      ui?.updateNextDisabled();
+      ui?.updatePreview();
+    }
+
     // IMPORTANT: no scheduleRender() on input (keeps Android keyboard open)
     function renderForm(q, content, ui) {
       const formWrap = mk("div", { class: "form-field-wrapper" });
@@ -1376,6 +1735,57 @@
         showScores ? mk("div", { class: "note quiz_result-scores" }, [
           (cfg.results || []).map((result) => `${result.title || result.id}: ${Number(scores[result.id]) || 0}`).join("\n")
         ]) : null
+      ]));
+    }
+
+    function renderSummary(q, content, pr) {
+      const preview = features.pricing && pr ? computePreviewLabel(pr) : null;
+      const readableAnswers = buildReadableAnswers(cfg, qmap, state.answers)
+        .filter((item) => !INTERNAL_ANSWER_IDS.has(item.questionId));
+      const addressParts = [
+        state.answers.addr_street,
+        state.answers.addr_unit,
+        [state.answers.addr_city, state.answers.addr_state, state.answers.addr_zip].filter(Boolean).join(", ")
+      ].filter(Boolean);
+      const contactParts = [
+        state.answers.contact_name,
+        state.answers.contact_phone,
+        state.answers.contact_email
+      ].filter(Boolean);
+      const permitRows = features.permitLookup ? [
+        ["Municipality", state.answers.municipality_city || "Not found"],
+        ["Permit fee", state.answers.permit_fee_usd ? `$${money(state.answers.permit_fee_usd)}` : "Not found"],
+        ["Expansion tank", state.answers.expansion_tank_required === true ? "Required" : state.answers.expansion_tank_required === false ? "Not flagged" : "Not checked"]
+      ] : [];
+
+      const section = (title, children) => mk("div", { class: "quiz_review-section" }, [
+        mk("div", { class: "quiz_review-section-title" }, [title]),
+        ...children
+      ]);
+
+      const rows = (items) => mk("div", { class: "quiz_review-rows" }, items.map(([label, value]) => (
+        mk("div", { class: "quiz_review-row" }, [
+          mk("div", { class: "quiz_review-label" }, [label]),
+          mk("div", { class: "quiz_review-value" }, [value || "-"])
+        ])
+      )));
+
+      content.appendChild(mk("div", { class: "quiz_review" }, [
+        features.pricing && preview ? section("Estimate", [
+          mk("div", { class: "quiz_review-total" }, [preview.value]),
+          mk("div", { class: "quiz_review-muted" }, [preview.sub])
+        ]) : null,
+        addressParts.length ? section("Service Address", [
+          mk("div", { class: "quiz_review-text" }, addressParts.map((part) => mk("div", {}, [part])))
+        ]) : null,
+        contactParts.length ? section("Contact", [
+          mk("div", { class: "quiz_review-text" }, contactParts.map((part) => mk("div", {}, [part])))
+        ]) : null,
+        permitRows.length ? section("Permit & Code Check", [rows(permitRows)]) : null,
+        readableAnswers.length ? section("Selections", [
+          rows(readableAnswers.map((item) => [item.question, item.answer]))
+        ]) : null,
+        q.note ? mk("div", { class: "note" }, [q.note]) : null
       ]));
     }
 
@@ -1834,9 +2244,10 @@
       // body
       if (q.type === "single_select") renderSingleSelect(q, content, ui);
       else if (q.type === "multi_select") renderMultiSelect(q, content, ui);
+      else if (q.type === "slider") renderSlider(q, content, ui);
       else if (q.type === "form") renderForm(q, content, ui);
       else if (q.type === "result") renderResult(q, content);
-      else if (q.type === "summary") content.appendChild(mk("div", { class: "note" }, ["Review your answers, then continue."]));
+      else if (q.type === "summary") renderSummary(q, content, pr);
       else if (q.type === "submit") content.appendChild(mk("div", { class: "note" }, [q.note || "Submit when you are ready."]));
       else if (q.type === "content") content.appendChild(mk("div", { class: "contentBlock", html: q.html || "" }));
 
