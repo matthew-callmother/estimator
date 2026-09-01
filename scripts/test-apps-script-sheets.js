@@ -2,7 +2,7 @@
 
 const assert = require("node:assert/strict");
 const { upsertAttributionRowsViaAppsScript } = require("../lib/apps-script-sheets");
-const { ATTRIBUTION_HEADERS, SYNC_HEADERS, rowValues } = require("../lib/google-sheets");
+const { ATTRIBUTION_HEADERS, SYNC_HEADERS, rowValues, syncRowValues } = require("../lib/google-sheets");
 const { upsertRows } = require("../google-apps-script/marketing-sync");
 
 async function run() {
@@ -29,7 +29,10 @@ async function run() {
     assert.equal(sent.body.secret, "webhook-test");
     assert.deepEqual(sent.body.attribution.headers, ATTRIBUTION_HEADERS);
     assert.equal(sent.body.attribution.rows[0][0], "call:123");
+    assert.equal(sent.body.attribution.rows[0][1], "2026-08-28T00:00:00Z");
+    assert.equal(sent.body.attribution.rows[0][26], "2026-08-28T01:00:00Z");
     assert.deepEqual(sent.body.syncRun.headers, SYNC_HEADERS);
+    assert.equal(syncRowValues(sampleRun())[1], "2026-08-28T01:00:00Z");
 
     const sheet = fakeSheet([
       ATTRIBUTION_HEADERS,
@@ -127,3 +130,4 @@ run().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
+
