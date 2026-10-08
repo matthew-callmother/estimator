@@ -8,7 +8,8 @@ const ENDPOINTS = {
   webBookingAttributions: { api: "marketingads/v2", path: "web-booking-attributions", marketingDates: true },
   jobs: { api: "jpm/v2", path: "jobs" },
   invoices: { api: "accounting/v2", path: "invoices" },
-  estimates: { api: "sales/v2", path: "estimates" }
+  estimates: { api: "sales/v2", path: "estimates" },
+  campaigns: { api: "marketing/v2", path: "campaigns" }
 };
 
 module.exports = async function handler(req, res) {
@@ -40,6 +41,7 @@ module.exports = async function handler(req, res) {
     const { access_token: accessToken, scope } = await tokenResponse.json();
     const fromUtc = new Date(Date.now() - 90 * 86400000).toISOString();
     const results = {};
+    const sampledRows = {};
 
     for (const [name, endpoint] of Object.entries(ENDPOINTS)) {
       const params = new URLSearchParams({
@@ -61,6 +63,7 @@ module.exports = async function handler(req, res) {
         payload = {};
       }
       const rows = Array.isArray(payload.data) ? payload.data : [];
+      sampledRows[name] = rows;
       results[name] = {
         status: response.status,
         error: response.ok ? null : {
@@ -80,14 +83,81 @@ module.exports = async function handler(req, res) {
       };
     }
 
+    const angiAttributions = sampledRows.attributedLeads.filter(isAngi);
+    const angiCampaignIds = new Set(angiAttributions
+      .map((row) => String(row.attribution?.stCampaignId || ""))
+      .filter(Boolean));
+    const angiBookings = sampledRows.bookings.filter((row) =>
+      isAngi(row) || angiCampaignIds.has(String(row.campaignId || "")));
+    const angiJobs = sampledRows.jobs.filter((row) =>
+      isAngi(row) || angiCampaignIds.has(String(row.campaignId || "")));
+    const diagnostics = {
+      angiCampaigns: sampledRows.campaigns.filter(isAngi).slice(0, 10)
+        .map((row) => ({ id: row.id, name: row.name, active: row.active })),
+      angiAttributionSample: angiAttributions.slice(0, 8).map((row) => ({
+        leadType: row.leadType,
+        source: row.attribution?.utmSource,
+        medium: row.attribution?.utmMedium,
+        campaign: row.attribution?.utmCampaign,
+        originalCampaign: row.attribution?.originalCampaign,
+        stCampaignId: row.attribution?.stCampaignId,
+        hasCall: Boolean(row.call?.id),
+        hasBooking: Boolean(row.booking?.id),
+        hasJob: Boolean(row.job?.id),
+        hasLeadForm: Boolean(row.leadForm?.leadNumber)
+      })),
+      bookingSources: topCounts(sampledRows.bookings, (row) => row.source),
+      bookingProviders: topCounts(sampledRows.bookings, (row) => row.bookingProviderId),
+      leadCaptureSources: topCounts(sampledRows.leads, (row) => row.captureSource),
+      angiBookingSample: angiBookings.slice(0, 5).map((row) => ({
+        source: row.source,
+        campaignId: row.campaignId,
+        bookingProviderId: row.bookingProviderId,
+        jobTypeId: row.jobTypeId,
+        status: row.status,
+        hasJob: Boolean(row.jobId),
+        summaryExcerpt: redact(row.summary)
+      })),
+      angiJobSample: angiJobs.slice(0, 5).map((row) => ({
+        campaignId: row.campaignId,
+        jobTypeId: row.jobTypeId,
+        status: row.jobStatus,
+        hasBooking: Boolean(row.bookingId),
+        hasInvoice: Boolean(row.invoiceId),
+        summaryExcerpt: redact(row.summary)
+      }))
+    };
+
     return res.status(200).json({
       fromUtc,
       clientIdLastSix: String(process.env.SERVICETITAN_CLIENT_ID || "").trim().slice(-6),
       scopes: String(scope || "").split(/\s+/).filter(Boolean),
-      results
+      results,
+      diagnostics
     });
   } catch (error) {
     return res.status(502).json({ error: "Angi probe failed.", detail: error.message });
   }
 };
+
+function isAngi(row) {
+  return /\bangi\b/i.test(JSON.stringify(row));
+}
+
+function topCounts(rows, select) {
+  const counts = new Map();
+  rows.forEach((row) => {
+    const key = String(select(row) ?? "").trim() || "[blank]";
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  return [...counts].sort((left, right) => right[1] - left[1]).slice(0, 10)
+    .map(([value, count]) => ({ value, count }));
+}
+
+function redact(input) {
+  return String(input || "").slice(0, 700)
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email]")
+    .replace(/(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/g, "[phone]")
+    .replace(/\b\d{1,6}\s+[A-Za-z0-9 .'-]+\s+(?:St|Street|Ave|Avenue|Rd|Road|Dr|Drive|Ln|Lane|Blvd|Boulevard|Ct|Court)\b/gi, "[address]");
+}
 
