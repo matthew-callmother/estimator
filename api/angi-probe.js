@@ -9,7 +9,7 @@ const ENDPOINTS = {
   jobs: { api: "jpm/v2", path: "jobs" },
   invoices: { api: "accounting/v2", path: "invoices" },
   estimates: { api: "sales/v2", path: "estimates" },
-  campaigns: { api: "marketing/v2", path: "campaigns" }
+  campaigns: { api: "marketing/v2", path: "campaigns", undated: true }
 };
 
 module.exports = async function handler(req, res) {
@@ -49,7 +49,7 @@ module.exports = async function handler(req, res) {
         pageSize: "100",
         ...(endpoint.marketingDates
           ? { fromUtc, toUtc: new Date().toISOString() }
-          : { createdOnOrAfter: fromUtc })
+          : endpoint.undated ? {} : { createdOnOrAfter: fromUtc })
       });
       const url = `${environment}/${endpoint.api}/tenant/${encodeURIComponent(tenant)}/${endpoint.path}?${params}`;
       const response = await fetch(url, {
@@ -118,6 +118,18 @@ module.exports = async function handler(req, res) {
         hasJob: Boolean(row.jobId),
         summaryExcerpt: redact(row.summary)
       })),
+      integrationBookingSample: sampledRows.bookings
+        .filter((row) => String(row.source || "").startsWith("LeadsIntegration#"))
+        .slice(0, 5).map((row) => ({
+          source: row.source,
+          campaignId: row.campaignId,
+          bookingProviderId: row.bookingProviderId,
+          jobTypeId: row.jobTypeId,
+          status: row.status,
+          hasJob: Boolean(row.jobId),
+          summaryExcerpt: redact(row.summary),
+          feeLines: feeLines(row.summary)
+        })),
       angiJobSample: angiJobs.slice(0, 5).map((row) => ({
         campaignId: row.campaignId,
         jobTypeId: row.jobTypeId,
@@ -125,8 +137,28 @@ module.exports = async function handler(req, res) {
         hasBooking: Boolean(row.bookingId),
         hasInvoice: Boolean(row.invoiceId),
         summaryExcerpt: redact(row.summary)
-      }))
+      })),
+      linkedBookingProbe: []
     };
+
+    for (const job of angiJobs.filter((row) => row.bookingId).slice(0, 2)) {
+      const url = `${environment}/crm/v2/tenant/${encodeURIComponent(tenant)}/bookings/${encodeURIComponent(job.bookingId)}`;
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}`, "ST-App-Key": appKey, Accept: "application/json" }
+      });
+      const payload = await response.json().catch(() => ({}));
+      const booking = payload.data || payload;
+      diagnostics.linkedBookingProbe.push({
+        status: response.status,
+        keys: response.ok ? Object.keys(booking) : [],
+        source: booking.source,
+        campaignId: booking.campaignId,
+        bookingProviderId: booking.bookingProviderId,
+        jobTypeId: booking.jobTypeId,
+        summaryExcerpt: redact(booking.summary),
+        feeLines: feeLines(booking.summary)
+      });
+    }
 
     return res.status(200).json({
       fromUtc,
@@ -159,5 +191,11 @@ function redact(input) {
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email]")
     .replace(/(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/g, "[phone]")
     .replace(/\b\d{1,6}\s+[A-Za-z0-9 .'-]+\s+(?:St|Street|Ave|Avenue|Rd|Road|Dr|Drive|Ln|Lane|Blvd|Boulevard|Ct|Court)\b/gi, "[address]");
+}
+
+function feeLines(input) {
+  return String(input || "").split(/\\n|\n|<br\s*\/?\s*>/i)
+    .filter((line) => /\bfee\b|\bcost\b|\bcharge\b/i.test(line))
+    .slice(0, 4).map(redact);
 }
 
