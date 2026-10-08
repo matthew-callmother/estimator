@@ -1,10 +1,14 @@
 "use strict";
 
 const ENDPOINTS = {
-  bookings: "crm/v2",
-  jobs: "jpm/v2",
-  invoices: "accounting/v2",
-  estimates: "sales/v2"
+  bookings: { api: "crm/v2", path: "bookings" },
+  providerBookings: { api: "crm/v2", path: "booking-provider/85648468/bookings" },
+  leads: { api: "crm/v2", path: "leads" },
+  attributedLeads: { api: "marketingads/v2", path: "attributed-leads", marketingDates: true },
+  webBookingAttributions: { api: "marketingads/v2", path: "web-booking-attributions", marketingDates: true },
+  jobs: { api: "jpm/v2", path: "jobs" },
+  invoices: { api: "accounting/v2", path: "invoices" },
+  estimates: { api: "sales/v2", path: "estimates" }
 };
 
 module.exports = async function handler(req, res) {
@@ -37,13 +41,15 @@ module.exports = async function handler(req, res) {
     const fromUtc = new Date(Date.now() - 90 * 86400000).toISOString();
     const results = {};
 
-    for (const [name, api] of Object.entries(ENDPOINTS)) {
+    for (const [name, endpoint] of Object.entries(ENDPOINTS)) {
       const params = new URLSearchParams({
         page: "1",
         pageSize: "100",
-        createdOnOrAfter: fromUtc
+        ...(endpoint.marketingDates
+          ? { fromUtc, toUtc: new Date().toISOString() }
+          : { createdOnOrAfter: fromUtc })
       });
-      const url = `${environment}/${api}/tenant/${encodeURIComponent(tenant)}/${name}?${params}`;
+      const url = `${environment}/${endpoint.api}/tenant/${encodeURIComponent(tenant)}/${endpoint.path}?${params}`;
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${accessToken}`, "ST-App-Key": appKey, Accept: "application/json" }
       });
