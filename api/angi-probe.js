@@ -33,7 +33,7 @@ module.exports = async function handler(req, res) {
     if (!tokenResponse.ok) {
       return res.status(502).json({ error: "ServiceTitan authentication failed.", status: tokenResponse.status });
     }
-    const { access_token: accessToken } = await tokenResponse.json();
+    const { access_token: accessToken, scope } = await tokenResponse.json();
     const fromUtc = new Date(Date.now() - 90 * 86400000).toISOString();
     const results = {};
 
@@ -47,10 +47,21 @@ module.exports = async function handler(req, res) {
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${accessToken}`, "ST-App-Key": appKey, Accept: "application/json" }
       });
-      const payload = await response.json().catch(() => ({}));
+      const responseText = await response.text();
+      let payload;
+      try {
+        payload = JSON.parse(responseText);
+      } catch {
+        payload = {};
+      }
       const rows = Array.isArray(payload.data) ? payload.data : [];
       results[name] = {
         status: response.status,
+        error: response.ok ? null : {
+          code: String(payload.type || payload.code || payload.error || "").slice(0, 160),
+          title: String(payload.title || "").slice(0, 160),
+          message: String(payload.message || payload.detail || responseText || "").slice(0, 300)
+        },
         count: rows.length,
         totalCount: payload.totalCount ?? null,
         hasMore: payload.hasMore ?? null,
@@ -63,7 +74,7 @@ module.exports = async function handler(req, res) {
       };
     }
 
-    return res.status(200).json({ fromUtc, results });
+    return res.status(200).json({ fromUtc, scopes: String(scope || "").split(/\s+/).filter(Boolean), results });
   } catch (error) {
     return res.status(502).json({ error: "Angi probe failed.", detail: error.message });
   }
