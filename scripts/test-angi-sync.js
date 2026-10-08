@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const {
   BOOKING_HEADERS, CALL_HEADERS, buildAngiRows, isAngiBooking, parseBookingSummary
 } = require("../lib/servicetitan-angi");
+const { safeCell, upsertAngiRows } = require("../google-apps-script/angi-sync");
 
 const summary = [
   "* Partner Job type: 40115 Water Heater - Repair or Service",
@@ -51,5 +52,21 @@ assert.equal(result.callRows[0].length, CALL_HEADERS.length);
 assert.equal(result.callRows[0][5], true);
 assert.equal(result.callRows[1][5], false);
 assert.equal(result.stats.callOnlyAttributions, 1);
+assert.equal(safeCell("=IMPORTXML(\"example\")"), "'=IMPORTXML(\"example\")");
+
+const written = [];
+const sheet = {
+  getLastRow: () => 1,
+  getMaxRows: () => 1000,
+  getName: () => "Angi_API_Calls",
+  getRange: (row, column, height, width) => ({
+    setValues: (rows) => written.push({ row, column, height, width, rows })
+  })
+};
+assert.deepEqual(upsertAngiRows(sheet, CALL_HEADERS, result.callRows), {
+  inserted: 2, updated: 0, unchanged: 0
+});
+assert.equal(written.length, 1);
+assert.equal(written[0].height, 2);
 console.log("Angi parser and joins passed.");
 
