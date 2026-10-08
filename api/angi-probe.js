@@ -80,7 +80,12 @@ module.exports = async function handler(req, res) {
       };
     }
 
-    return res.status(200).json({ fromUtc, scopes: String(scope || "").split(/\s+/).filter(Boolean), results });
+    return res.status(200).json({
+      fromUtc,
+      clientIdLastSix: String(process.env.SERVICETITAN_CLIENT_ID || "").trim().slice(-6),
+      scopes: String(scope || "").split(/\s+/).filter(Boolean),
+      results
+    });
   } catch (error) {
     return res.status(502).json({ error: "Angi probe failed.", detail: error.message });
   }
