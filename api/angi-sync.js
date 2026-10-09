@@ -43,6 +43,7 @@ module.exports = async function handler(req, res) {
             recordKey: row[0], isRan: row[9], attributionStatus: row[10],
             technicianCount: row[11], hasSoldEstimate: row[16]
           })),
+          firstVisitTechnicians: technicianPreview(opportunityRows),
           soldEstimateCount: estimateRows.length,
           invoiceCount: invoiceRows.length,
           callOnlyCount: stats.callOnlyAttributions
@@ -98,5 +99,20 @@ function integerEnv(name, fallback, min, max) {
     throw new Error(`${name} must be between ${min} and ${max}.`);
   }
   return value;
+}
+
+function technicianPreview(opportunityRows) {
+  const byId = new Map();
+  for (const row of opportunityRows) {
+    const ids = JSON.parse(row[12]);
+    const names = JSON.parse(row[13]);
+    ids.forEach((id, index) => {
+      if (!byId.has(id)) byId.set(id, { technicianId: id, technicianName: names[index], ranVisits: 0, soldVisits: 0 });
+      const technician = byId.get(id);
+      technician.ranVisits += 1;
+      if (row[16]) technician.soldVisits += 1;
+    });
+  }
+  return [...byId.values()].sort((a, b) => b.ranVisits - a.ranVisits || a.technicianId.localeCompare(b.technicianId));
 }
 

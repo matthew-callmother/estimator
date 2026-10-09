@@ -116,8 +116,11 @@ assert.equal(result.stats.distinctSoldByIds, 2);
 assert.equal(result.stats.linkedBookingsWithoutAppointments, 0);
 assert.equal(result.stats.linkedBookingsWithUnworkedAppointments, 0);
 assert.deepEqual(result.stats.linkedAppointmentStatuses, { canceled: 1, done: 4 });
+assert.deepEqual(result.stats.unworkedLinkedAppointmentStatuses, {});
 assert.equal(result.stats.workedFirstVisits, 2);
 assert.equal(result.stats.firstVisitsWithTechnicians, 2);
+assert.equal(result.stats.firstVisitsWithTechnicianNames, 2);
+assert.equal(result.stats.distinctFirstVisitTechnicians, 3);
 assert.equal(result.stats.multiTechnicianFirstVisits, 1);
 assert.equal(result.stats.maxFirstVisitTechnicians, 2);
 assert.equal(result.stats.workedFirstVisitsWithSoldEstimates, 1);
@@ -144,6 +147,17 @@ assert.equal(missingAmount.jobRows[0][15], "");
 assert.equal(missingAmount.invoiceRows[0][8], "");
 assert.equal(missingAmount.opportunityRows[0][10], "no_worked_appointment");
 assert.equal(missingAmount.stats.linkedBookingsWithoutAppointments, 1);
+const unworked = buildAngiRows({
+  bookings: [booking], jobs: [{ id: 20, bookingId: 10 }], invoices: [], estimates: [], attributions: [],
+  appointments: [
+    { id: 101, jobId: 20, start: "2026-10-01T13:00:00Z", status: "Canceled" },
+    { id: 102, jobId: 20, start: "2026-10-09T13:00:00Z", status: "Scheduled" }
+  ],
+  assignments: [{ appointmentId: 101, jobId: 20, technicianId: 900, status: "Scheduled" }]
+}, "2026-10-08T00:00:00Z");
+assert.equal(unworked.opportunityRows[0][9], false);
+assert.equal(unworked.stats.linkedBookingsWithUnworkedAppointments, 1);
+assert.deepEqual(unworked.stats.unworkedLinkedAppointmentStatuses, { canceled: 1, scheduled: 1 });
 assert.equal(safeCell("=IMPORTXML(\"example\")"), "'=IMPORTXML(\"example\")");
 
 const written = [];
