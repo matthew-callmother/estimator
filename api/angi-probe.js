@@ -166,6 +166,40 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    diagnostics.appointmentProbe = [];
+    const appointmentJobs = [...new Map([...angiJobs, ...sampledRows.jobs]
+      .filter((job) => job.firstAppointmentId)
+      .map((job) => [String(job.id), job])).values()].slice(0, 4);
+    for (const job of appointmentJobs) {
+      const paths = {
+        first: `jpm/v2/tenant/${encodeURIComponent(tenant)}/appointments/${encodeURIComponent(job.firstAppointmentId)}`,
+        all: `jpm/v2/tenant/${encodeURIComponent(tenant)}/appointments?jobId=${encodeURIComponent(job.id)}&page=1&pageSize=100`,
+        assignments: `dispatch/v2/tenant/${encodeURIComponent(tenant)}/appointment-assignments?jobId=${encodeURIComponent(job.id)}&page=1&pageSize=100`
+      };
+      const sample = { angi: angiJobs.includes(job), jobId: job.id, firstAppointmentId: job.firstAppointmentId };
+      for (const [name, path] of Object.entries(paths)) {
+        const response = await fetch(`${environment}/${path}`, {
+          headers: { Authorization: `Bearer ${accessToken}`, "ST-App-Key": appKey, Accept: "application/json" }
+        });
+        const payload = await response.json().catch(() => ({}));
+        const rows = Array.isArray(payload.data) ? payload.data : response.ok ? [payload] : [];
+        sample[name] = {
+          status: response.status,
+          error: response.ok ? null : String(payload.title || payload.message || "").slice(0, 160),
+          count: rows.length,
+          hasMore: payload.hasMore ?? null,
+          keys: rows[0] ? Object.keys(rows[0]) : [],
+          items: rows.slice(0, 5).map((row) => ({
+            id: row.id, jobId: row.jobId, jobAppointmentId: row.jobAppointmentId,
+            technicianId: row.technicianId, status: row.status,
+            start: row.start, end: row.end, active: row.active, unused: row.unused,
+            assignedOn: row.assignedOn
+          }))
+        };
+      }
+      diagnostics.appointmentProbe.push(sample);
+    }
+
     return res.status(200).json({
       fromUtc,
       clientIdLastSix: String(process.env.SERVICETITAN_CLIENT_ID || "").trim().slice(-6),
