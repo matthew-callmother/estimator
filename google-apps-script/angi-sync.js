@@ -1,8 +1,13 @@
 const ANGI_RUN_HEADERS = [
-  "Run_ID", "From_UTC", "To_UTC", "Angi_Bookings", "Fees_Parsed",
-  "Bookings_With_Jobs", "Bookings_With_Invoices", "Call_Only_Attributions", "Completed_At"
+  "Run_ID", "From_UTC", "To_UTC", "Angi_Bookings", "Fees_Parsed", "Angi_Jobs",
+  "Sold_Estimates", "Invoices", "Bookings_With_Jobs", "Bookings_With_Invoices",
+  "Jobs_With_Sold_By", "Call_Only_Attributions", "Worked_First_Visits",
+  "First_Visits_With_Technicians", "Multi_Technician_First_Visits", "Completed_At"
 ];
-const ANGI_ALLOWED_TABS = ["Angi_API_Bookings", "Angi_API_Calls", "Angi_API_Sync_Runs"];
+const ANGI_ALLOWED_TABS = [
+  "Angi_API_Bookings", "Angi_API_Jobs", "Angi_API_Opportunities", "Angi_API_Estimates", "Angi_API_Invoices",
+  "Angi_API_Calls", "Angi_API_Sync_Runs"
+];
 const ANGI_SPREADSHEET_ID = "1VRqenGE0QEvBEtfdl6GZZuKYJOl9TTkSjk14PSBV4wI";
 
 function doPost(event) {
@@ -13,9 +18,13 @@ function doPost(event) {
     const properties = PropertiesService.getScriptProperties();
     const expectedSecret = properties.getProperty("ANGI_SYNC_WEBHOOK_SECRET");
     if (!expectedSecret || payload.secret !== expectedSecret) throw new Error("Unauthorized Angi sync request.");
-    if (payload.version !== 1) throw new Error("Unsupported Angi sync payload.");
+    if (payload.version !== 3) throw new Error("Unsupported Angi sync payload.");
     const spreadsheet = SpreadsheetApp.openById(ANGI_SPREADSHEET_ID);
     const bookings = requiredSection(payload.bookings, "Angi_API_Bookings");
+    const jobs = requiredSection(payload.jobs, "Angi_API_Jobs");
+    const opportunities = requiredSection(payload.opportunities, "Angi_API_Opportunities");
+    const estimates = requiredSection(payload.estimates, "Angi_API_Estimates");
+    const invoices = requiredSection(payload.invoices, "Angi_API_Invoices");
     const calls = requiredSection(payload.calls, "Angi_API_Calls");
     const run = payload.run;
     if (!run || run.sheetName !== "Angi_API_Sync_Runs" || !Array.isArray(run.values)) {
@@ -23,10 +32,18 @@ function doPost(event) {
     }
     if (run.values.length !== ANGI_RUN_HEADERS.length) throw new Error("Invalid Angi sync run width.");
     const bookingSheet = ensureAngiSheet(spreadsheet, bookings.sheetName, bookings.headers);
+    const jobSheet = ensureAngiSheet(spreadsheet, jobs.sheetName, jobs.headers);
+    const opportunitySheet = ensureAngiSheet(spreadsheet, opportunities.sheetName, opportunities.headers);
+    const estimateSheet = ensureAngiSheet(spreadsheet, estimates.sheetName, estimates.headers);
+    const invoiceSheet = ensureAngiSheet(spreadsheet, invoices.sheetName, invoices.headers);
     const callSheet = ensureAngiSheet(spreadsheet, calls.sheetName, calls.headers);
     const runSheet = ensureAngiSheet(spreadsheet, run.sheetName, ANGI_RUN_HEADERS);
     const result = {
       bookings: upsertAngiRows(bookingSheet, bookings.headers, bookings.rows),
+      jobs: upsertAngiRows(jobSheet, jobs.headers, jobs.rows),
+      opportunities: upsertAngiRows(opportunitySheet, opportunities.headers, opportunities.rows),
+      estimates: upsertAngiRows(estimateSheet, estimates.headers, estimates.rows),
+      invoices: upsertAngiRows(invoiceSheet, invoices.headers, invoices.rows),
       calls: upsertAngiRows(callSheet, calls.headers, calls.rows)
     };
     runSheet.appendRow(run.values.map(safeCell));
