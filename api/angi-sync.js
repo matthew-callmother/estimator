@@ -1,7 +1,10 @@
 "use strict";
 
 const { randomUUID } = require("node:crypto");
-const { BOOKING_HEADERS, CALL_HEADERS, buildAngiRows, fetchAngiData } = require("../lib/servicetitan-angi");
+const {
+  BOOKING_HEADERS, JOB_HEADERS, ESTIMATE_HEADERS, INVOICE_HEADERS, CALL_HEADERS,
+  buildAngiRows, fetchAngiData
+} = require("../lib/servicetitan-angi");
 
 module.exports = async function handler(req, res) {
   if (req.method !== "GET" && req.method !== "POST") {
@@ -23,22 +26,28 @@ module.exports = async function handler(req, res) {
       pageSize: integerEnv("ANGI_SYNC_PAGE_SIZE", 100, 1, 1000),
       maxPages: integerEnv("ANGI_SYNC_MAX_PAGES", 50, 1, 500)
     });
-    const { bookingRows, callRows, stats } = buildAngiRows(records, toUtc);
+    const { bookingRows, jobRows, estimateRows, invoiceRows, callRows, stats } = buildAngiRows(records, toUtc);
     const dryRun = process.env.ANGI_SYNC_DRY_RUN !== "false";
     if (dryRun) {
       return res.status(200).json({
         ok: true, dryRun, runId, window: { fromUtc, toUtc }, stats,
         preview: {
           bookings: bookingRows.slice(0, 3).map((row) => ({
-            recordKey: row[0], hasFee: row[5] !== "", partnerJobType: row[6],
-            jobCount: row[15] ? row[15].split(" | ").length : 0,
-            soldEstimateSubtotal: row[19], invoiceTotal: row[22]
+            recordKey: row[0], hasFee: row[6] !== "", partnerJobType: row[7]
           })),
-          callOnlyCount: callRows.length
+          jobs: jobRows.slice(0, 3).map((row) => ({
+            recordKey: row[0], bookingId: row[2], hasSeller: Boolean(row[12]),
+            sellerSource: row[13], sellerConflict: row[14], hasPrimaryEstimate: Boolean(row[10])
+          })),
+          soldEstimateCount: estimateRows.length,
+          invoiceCount: invoiceRows.length,
+          callOnlyCount: stats.callOnlyAttributions
         }
       });
     }
-    const result = await writeToAppsScript({ runId, fromUtc, toUtc, bookingRows, callRows, stats });
+    const result = await writeToAppsScript({
+      runId, fromUtc, toUtc, bookingRows, jobRows, estimateRows, invoiceRows, callRows, stats
+    });
     return res.status(200).json({ ok: true, dryRun, runId, stats, sheet: result });
   } catch (error) {
     console.error("Angi sync failed", { runId, message: error.message });
@@ -46,7 +55,9 @@ module.exports = async function handler(req, res) {
   }
 };
 
-async function writeToAppsScript({ runId, fromUtc, toUtc, bookingRows, callRows, stats }) {
+async function writeToAppsScript({
+  runId, fromUtc, toUtc, bookingRows, jobRows, estimateRows, invoiceRows, callRows, stats
+}) {
   const url = String(process.env.ANGI_APPS_SCRIPT_WEBHOOK_URL || "").trim();
   const secret = String(process.env.ANGI_APPS_SCRIPT_WEBHOOK_SECRET || "").trim();
   if (!url || !secret) throw new Error("Angi Apps Script webhook URL and secret are required for live writes.");
@@ -55,10 +66,17 @@ async function writeToAppsScript({ runId, fromUtc, toUtc, bookingRows, callRows,
     redirect: "follow",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      version: 1, secret,
+      version: 2, secret,
       bookings: { sheetName: "Angi_API_Bookings", headers: BOOKING_HEADERS, rows: bookingRows },
+      jobs: { sheetName: "Angi_API_Jobs", headers: JOB_HEADERS, rows: jobRows },
+      estimates: { sheetName: "Angi_API_Estimates", headers: ESTIMATE_HEADERS, rows: estimateRows },
+      invoices: { sheetName: "Angi_API_Invoices", headers: INVOICE_HEADERS, rows: invoiceRows },
       calls: { sheetName: "Angi_API_Calls", headers: CALL_HEADERS, rows: callRows },
-      run: { sheetName: "Angi_API_Sync_Runs", values: [runId, fromUtc, toUtc, stats.angiBookings, stats.feesParsed, stats.bookingsWithJobs, stats.bookingsWithInvoices, stats.callOnlyAttributions, new Date().toISOString()] }
+      run: { sheetName: "Angi_API_Sync_Runs", values: [
+        runId, fromUtc, toUtc, stats.angiBookings, stats.feesParsed, stats.angiJobs,
+        stats.soldEstimates, stats.invoices, stats.bookingsWithJobs, stats.bookingsWithInvoices,
+        stats.jobsWithSeller, stats.callOnlyAttributions, new Date().toISOString()
+      ] }
     })
   });
   const body = await response.json().catch(() => ({}));
