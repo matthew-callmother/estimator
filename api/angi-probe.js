@@ -138,6 +138,12 @@ module.exports = async function handler(req, res) {
         hasInvoice: Boolean(row.invoiceId),
         summaryExcerpt: redact(row.summary)
       })),
+      sellerSignals: {
+        jobsWithSoldById: sampledRows.jobs.filter((row) => row.soldById).length,
+        estimateSoldByTypes: topCounts(sampledRows.estimates, (row) => typeof row.soldBy),
+        estimateSoldBySamples: sampledRows.estimates.filter((row) => row.soldBy)
+          .slice(0, 5).map((row) => row.soldBy)
+      },
       linkedBookingProbe: []
     };
 
