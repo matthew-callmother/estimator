@@ -5,8 +5,8 @@ const ANGI_RUN_HEADERS = [
   "First_Visits_With_Technicians", "Multi_Technician_First_Visits", "Completed_At"
 ];
 const ANGI_ALLOWED_TABS = [
-  "Angi_API_Bookings", "Angi_API_Jobs", "Angi_API_Opportunities", "Angi_API_Estimates", "Angi_API_Invoices",
-  "Angi_API_Calls", "Angi_API_Sync_Runs"
+  "Angi_Live_Bookings", "Angi_Live_Jobs", "Angi_Live_Opportunities", "Angi_Live_Estimates", "Angi_Live_Invoices",
+  "Angi_Live_Calls", "Angi_Live_Sync_Runs"
 ];
 const ANGI_SPREADSHEET_ID = "1VRqenGE0QEvBEtfdl6GZZuKYJOl9TTkSjk14PSBV4wI";
 
@@ -20,14 +20,14 @@ function doPost(event) {
     if (!expectedSecret || payload.secret !== expectedSecret) throw new Error("Unauthorized Angi sync request.");
     if (payload.version !== 3) throw new Error("Unsupported Angi sync payload.");
     const spreadsheet = SpreadsheetApp.openById(ANGI_SPREADSHEET_ID);
-    const bookings = requiredSection(payload.bookings, "Angi_API_Bookings");
-    const jobs = requiredSection(payload.jobs, "Angi_API_Jobs");
-    const opportunities = requiredSection(payload.opportunities, "Angi_API_Opportunities");
-    const estimates = requiredSection(payload.estimates, "Angi_API_Estimates");
-    const invoices = requiredSection(payload.invoices, "Angi_API_Invoices");
-    const calls = requiredSection(payload.calls, "Angi_API_Calls");
+    const bookings = requiredSection(payload.bookings, "Angi_Live_Bookings");
+    const jobs = requiredSection(payload.jobs, "Angi_Live_Jobs");
+    const opportunities = requiredSection(payload.opportunities, "Angi_Live_Opportunities");
+    const estimates = requiredSection(payload.estimates, "Angi_Live_Estimates");
+    const invoices = requiredSection(payload.invoices, "Angi_Live_Invoices");
+    const calls = requiredSection(payload.calls, "Angi_Live_Calls");
     const run = payload.run;
-    if (!run || run.sheetName !== "Angi_API_Sync_Runs" || !Array.isArray(run.values)) {
+    if (!run || run.sheetName !== "Angi_Live_Sync_Runs" || !Array.isArray(run.values)) {
       throw new Error("Missing Angi sync run.");
     }
     if (run.values.length !== ANGI_RUN_HEADERS.length) throw new Error("Invalid Angi sync run width.");
