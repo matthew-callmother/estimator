@@ -36,8 +36,8 @@ module.exports = async function handler(req, res) {
             recordKey: row[0], hasFee: row[6] !== "", partnerJobType: row[7]
           })),
           jobs: jobRows.slice(0, 3).map((row) => ({
-            recordKey: row[0], bookingId: row[2], hasSeller: Boolean(row[12]),
-            sellerSource: row[13], sellerConflict: row[14], hasPrimaryEstimate: Boolean(row[10])
+            recordKey: row[0], bookingId: row[2], hasSoldBy: Boolean(row[12]),
+            soldBySource: row[13], soldByConflict: row[14], hasPrimaryEstimate: Boolean(row[10])
           })),
           soldEstimateCount: estimateRows.length,
           invoiceCount: invoiceRows.length,
@@ -75,7 +75,7 @@ async function writeToAppsScript({
       run: { sheetName: "Angi_API_Sync_Runs", values: [
         runId, fromUtc, toUtc, stats.angiBookings, stats.feesParsed, stats.angiJobs,
         stats.soldEstimates, stats.invoices, stats.bookingsWithJobs, stats.bookingsWithInvoices,
-        stats.jobsWithSeller, stats.callOnlyAttributions, new Date().toISOString()
+        stats.jobsWithSoldBy, stats.callOnlyAttributions, new Date().toISOString()
       ] }
     })
   });
