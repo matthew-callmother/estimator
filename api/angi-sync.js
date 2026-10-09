@@ -72,13 +72,13 @@ async function writeToAppsScript({
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       version: 3, secret,
-      bookings: { sheetName: "Angi_API_Bookings", headers: BOOKING_HEADERS, rows: bookingRows },
-      jobs: { sheetName: "Angi_API_Jobs", headers: JOB_HEADERS, rows: jobRows },
-      opportunities: { sheetName: "Angi_API_Opportunities", headers: OPPORTUNITY_HEADERS, rows: opportunityRows },
-      estimates: { sheetName: "Angi_API_Estimates", headers: ESTIMATE_HEADERS, rows: estimateRows },
-      invoices: { sheetName: "Angi_API_Invoices", headers: INVOICE_HEADERS, rows: invoiceRows },
-      calls: { sheetName: "Angi_API_Calls", headers: CALL_HEADERS, rows: callRows },
-      run: { sheetName: "Angi_API_Sync_Runs", values: [
+      bookings: { sheetName: "Angi_Live_Bookings", headers: BOOKING_HEADERS, rows: bookingRows },
+      jobs: { sheetName: "Angi_Live_Jobs", headers: JOB_HEADERS, rows: jobRows },
+      opportunities: { sheetName: "Angi_Live_Opportunities", headers: OPPORTUNITY_HEADERS, rows: opportunityRows },
+      estimates: { sheetName: "Angi_Live_Estimates", headers: ESTIMATE_HEADERS, rows: estimateRows },
+      invoices: { sheetName: "Angi_Live_Invoices", headers: INVOICE_HEADERS, rows: invoiceRows },
+      calls: { sheetName: "Angi_Live_Calls", headers: CALL_HEADERS, rows: callRows },
+      run: { sheetName: "Angi_Live_Sync_Runs", values: [
         runId, fromUtc, toUtc, stats.angiBookings, stats.feesParsed, stats.angiJobs,
         stats.soldEstimates, stats.invoices, stats.bookingsWithJobs, stats.bookingsWithInvoices,
         stats.jobsWithSoldBy, stats.callOnlyAttributions, stats.workedFirstVisits,
