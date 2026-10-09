@@ -7,6 +7,8 @@ const ENDPOINTS = {
   attributedLeads: { api: "marketingads/v2", path: "attributed-leads", marketingDates: true },
   webBookingAttributions: { api: "marketingads/v2", path: "web-booking-attributions", marketingDates: true },
   jobs: { api: "jpm/v2", path: "jobs" },
+  appointments: { api: "jpm/v2", path: "appointments" },
+  assignments: { api: "dispatch/v2", path: "appointment-assignments", modifiedDates: true },
   invoices: { api: "accounting/v2", path: "invoices" },
   estimates: { api: "sales/v2", path: "estimates" },
   campaigns: { api: "marketing/v2", path: "campaigns", undated: true }
@@ -49,7 +51,8 @@ module.exports = async function handler(req, res) {
         pageSize: "100",
         ...(endpoint.marketingDates
           ? { fromUtc, toUtc: new Date().toISOString() }
-          : endpoint.undated ? {} : { createdOnOrAfter: fromUtc })
+          : endpoint.undated ? {} : endpoint.modifiedDates
+            ? { modifiedOnOrAfter: fromUtc } : { createdOnOrAfter: fromUtc })
       });
       const url = `${environment}/${endpoint.api}/tenant/${encodeURIComponent(tenant)}/${endpoint.path}?${params}`;
       const response = await fetch(url, {
