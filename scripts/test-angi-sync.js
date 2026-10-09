@@ -113,6 +113,9 @@ assert.equal(result.stats.soldJobsWithJobSoldBy, 1);
 assert.equal(result.stats.soldJobsWithEstimateSoldBy, 1);
 assert.equal(result.stats.soldByConflicts, 1);
 assert.equal(result.stats.distinctSoldByIds, 2);
+assert.equal(result.stats.linkedBookingsWithoutAppointments, 0);
+assert.equal(result.stats.linkedBookingsWithUnworkedAppointments, 0);
+assert.deepEqual(result.stats.linkedAppointmentStatuses, { canceled: 1, done: 4 });
 assert.equal(result.stats.workedFirstVisits, 2);
 assert.equal(result.stats.firstVisitsWithTechnicians, 2);
 assert.equal(result.stats.multiTechnicianFirstVisits, 1);
@@ -140,6 +143,7 @@ const missingAmount = buildAngiRows({
 assert.equal(missingAmount.jobRows[0][15], "");
 assert.equal(missingAmount.invoiceRows[0][8], "");
 assert.equal(missingAmount.opportunityRows[0][10], "no_worked_appointment");
+assert.equal(missingAmount.stats.linkedBookingsWithoutAppointments, 1);
 assert.equal(safeCell("=IMPORTXML(\"example\")"), "'=IMPORTXML(\"example\")");
 
 const written = [];
