@@ -1,11 +1,14 @@
 # Angi ServiceTitan Sync
 
-The read-only preview endpoint is `/api/angi-sync`. It fetches the last 45 days of
+The `/api/angi-sync` endpoint fetches the configured lookback window of
 ServiceTitan bookings, jobs, appointments, appointment assignments, invoices,
 sold estimates, and attributed calls.
 `ANGI_SYNC_DRY_RUN` defaults to enabled, so it returns counts and non-PII examples
 without writing a Sheet. The endpoint requires `CRON_SECRET`, except for GET on
 a protected Vercel Preview deployment while dry-run is enabled.
+The production cron is scheduled daily at 10:17 UTC. It must have
+`ANGI_SYNC_DRY_RUN=false`, `ANGI_SYNC_LOOKBACK_DAYS=365`,
+`ANGI_SYNC_PAGE_SIZE=500`, and `ANGI_SYNC_MAX_PAGES=100` in Production.
 
 The only destination is the existing [Mother Angi Operations Database](https://docs.google.com/spreadsheets/d/1VRqenGE0QEvBEtfdl6GZZuKYJOl9TTkSjk14PSBV4wI/edit).
 The v3 writer touches only `Angi_Live_Bookings`, `Angi_Live_Jobs`,
@@ -58,35 +61,26 @@ distinct `Booking_ID` values with `Is_Ran = TRUE` and `Has_Sold_Estimate = TRUE`
 divided by distinct `Booking_ID` values with `Is_Ran = TRUE`, grouped by
 `Single_Technician_ID`. Do not use `Sold_By_ID` as that denominator.
 
-## Connect the daily writer
+## Daily writer
 
 1. The separate [Mother Angi Operations Sync Apps Script project](https://script.google.com/u/1/home/projects/1oswKjFfdmXz2g_cksjVmA8WPs559QmkDntaoJhA34A_4ZBUpi00LqMoq/edit)
    has the `google-apps-script/angi-sync.js` writer deployed as a web app,
    executing as the work account. Its `ANGI_SYNC_WEBHOOK_SECRET` script property
-   matches the Vercel secret. An authenticated empty payload created and verified
-   all seven `Angi_Live_*` tabs without changing older tabs.
+   matches the Vercel secret. The writer created all seven `Angi_Live_*` tabs
+   without changing older tabs.
 2. The Vercel `estimator` project has `ANGI_APPS_SCRIPT_WEBHOOK_URL` and
-   `ANGI_APPS_SCRIPT_WEBHOOK_SECRET` for Preview and Production. Both environments
-   still have `ANGI_SYNC_DRY_RUN=true`. Redeploy after changing variables.
-3. To test one real write, set `ANGI_SYNC_DRY_RUN=false` for Preview only,
-   redeploy, and invoke `/api/angi-sync` with `Authorization: Bearer <CRON_SECRET>`.
-   Confirm the seven tabs and inserted/updated counts, including
-   `Angi_Live_Opportunities`. Keep Production in dry-run mode until that write
-   is verified. Only then enable Production writes and add a daily Vercel cron.
+   `ANGI_APPS_SCRIPT_WEBHOOK_SECRET` for Preview and Production. A live Preview
+   sync on October 9, 2026 wrote 1,743 Angi bookings, 513 linked jobs, 156 sold
+   estimates, 518 invoices, and 1,873 attributed calls from the last 365 days.
+3. The daily cron calls `GET /api/angi-sync` with the Vercel `CRON_SECRET` bearer
+   token. Successful writes appear in `Angi_Live_Sync_Runs`; Vercel function
+   logs contain failures. Only production deployments register the cron.
 
 The sync fails instead of publishing partial data if any ServiceTitan endpoint
-exceeds `ANGI_SYNC_MAX_PAGES` (default 50). Optional bounds are
-`ANGI_SYNC_LOOKBACK_DAYS` (default 45) and `ANGI_SYNC_PAGE_SIZE` (default 100).
-Do not run the 12-calendar-month backfill or enable a daily cron yet. First,
-validate first-visit assignment coverage on sold and unsold Angi jobs. A 45-day
-preview dry run found 492 Angi bookings, 161 linked jobs, 104 first worked visits,
-104 visits with one named technician across 11 technicians, and 29 first worked
-visits with a sold estimate. The other 57 linked bookings had appointments but
-none with `Done` or `Working` status: 46 `Canceled`, 9 `Scheduled`, and 2 `Hold`.
-`Hold` remains excluded until its meaning is confirmed for this business. The
-current fetch filters
-every entity by creation date;
-an older booking with a later job, estimate, or invoice can fall outside the
-window. Incremental refresh of those older linked records and a bounded
-backfill strategy must be implemented and tested before nightly reporting is
-considered complete.
+exceeds `ANGI_SYNC_MAX_PAGES`. The 365-day window is rolling, not an exact
+calendar-year extract. Stable keys upsert current rows without duplication.
+The current fetch filters most entities by creation date; a booking older than
+the rolling window with a later job, estimate, or invoice can be missed. The
+dashboard should show the latest successful run timestamp, and historical
+reporting beyond the rolling year needs a separate refresh strategy.
+
