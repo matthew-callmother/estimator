@@ -2,7 +2,10 @@
 
 The `/api/angi-sync` endpoint fetches the configured lookback window of
 ServiceTitan bookings, jobs, appointments, appointment assignments, invoices,
-sold estimates, and attributed calls.
+sold estimates, and attributed calls. For Angi jobs without a direct booking
+link, it also reads booking/customer contacts and job locations for matching.
+When an Angi job references a booking just outside the lookback window, the
+sync also tries to fetch that booking by ID.
 `ANGI_SYNC_DRY_RUN` defaults to enabled, so it returns counts and non-PII examples
 without writing a Sheet. The endpoint requires `CRON_SECRET`, except for GET on
 a protected Vercel Preview deployment while dry-run is enabled.
@@ -20,15 +23,18 @@ layout causes the write to fail rather than silently overwriting it.
 - `Angi_Live_Bookings`: one row per Angi integration booking. `Actual_Lead_Fee`
   and `Partner_Job_Type` come from labeled lines in the booking summary. Sum
   lead fees here, not on joined job or invoice rows.
-- `Angi_Live_Jobs`: one row per linked job, joined by `job.bookingId` or the
-  booking's `jobId`. `Sold_By_ID` uses `job.soldById` first, then the largest
+- `Angi_Live_Jobs`: one row per Angi-campaign job or job linked to an Angi
+  booking. The match order is booking ID (including a direct attribution),
+  unique customer email, then unique full street address and ZIP. A duplicate
+  or missing match leaves `Booking_ID` blank; the job and its sale still import.
+  `Sold_By_ID` uses `job.soldById` first, then the largest
   sold estimate's `soldBy`. `Sold_By_Source` and `Sold_By_Conflict` make that
   outcome attribution auditable. This is **not** the person who ran the initial
   sales visit and must not be used as the close-rate denominator. This row
   holds the primary sold estimate subtotal for convenient one-row-per-job
   reporting.
 - `Angi_Live_Opportunities`: one row per Angi booking, including bookings with
-  no job. It uses the earliest active, used, already-started appointment with
+  no matched job. It uses the earliest active, used, already-started appointment with
   `Done` or `Working` status across linked jobs. Only active `Done` or `Working`
   assignment records on that appointment identify who ran it. Technician IDs
   and names are JSON arrays; the singular ID and name columns are filled only
@@ -37,11 +43,12 @@ layout causes the write to fail rather than silently overwriting it.
   is true when any linked job has a sold estimate; the primary estimate is the
   largest sold subtotal. Do not sum sold subtotals or lead fees from this tab
   together with their source tabs.
-- `Angi_Live_Estimates`: one row per sold estimate. Only
+- `Angi_Live_Estimates`: one row per sold estimate on an Angi job, including
+  unmatched jobs with blank `Booking_ID`. Only
   `Is_Primary_For_Job = TRUE` identifies the largest sold estimate for a job;
   summing every estimate row can double-count a sale.
-- `Angi_Live_Invoices`: one row per linked invoice. `Invoice_Total` is billed,
-  not collected revenue. Join through `Job_ID` and `Booking_ID`.
+- `Angi_Live_Invoices`: one row per invoice on an Angi job. `Invoice_Total` is
+  billed, not collected revenue. Join through `Job_ID`; `Booking_ID` can be blank.
 - `Angi_Live_Calls`: attributed Angi calls. `Is_Booking_Linked` tells the
   dashboard whether a call is already represented by a booking row. Count
   call-only leads only where this value is `FALSE`.
@@ -56,6 +63,11 @@ the first worked visit. For a visit with multiple technicians, retain every
 assignment and decide team-credit rules in the dashboard rather than guessing
 a primary salesperson. Do not publish a salesperson close rate until `Hold`
 handling and the dashboard's denominator are reviewed.
+Contact emails and location addresses are used in memory for matching; they are
+not added to the live tabs. Optional contact/location API errors do not cancel
+the sync. The response's `jobMatches`, `unmatchedJobs`, `unmatchedSoldJobs`, and
+`enrichment` counts show match coverage. In the Sheet, filter `Angi_Live_Jobs`
+to blank `Booking_ID` to review Angi work that has not yet been tied to a lead.
 For the current single-technician cohort, the proposed per-technician metric is
 distinct `Booking_ID` values with `Is_Ran = TRUE` and `Has_Sold_Estimate = TRUE`
 divided by distinct `Booking_ID` values with `Is_Ran = TRUE`, grouped by
@@ -83,4 +95,3 @@ The current fetch filters most entities by creation date; a booking older than
 the rolling window with a later job, estimate, or invoice can be missed. The
 dashboard should show the latest successful run timestamp, and historical
 reporting beyond the rolling year needs a separate refresh strategy.
-
