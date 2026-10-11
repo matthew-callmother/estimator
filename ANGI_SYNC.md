@@ -65,8 +65,11 @@ a primary salesperson. Do not publish a salesperson close rate until `Hold`
 handling and the dashboard's denominator are reviewed.
 Contact emails and location addresses are used in memory for matching; they are
 not added to the live tabs. Optional contact/location API errors do not cancel
-the sync. The response's `jobMatches`, `unmatchedJobs`, `unmatchedSoldJobs`, and
-`enrichment` counts show match coverage. In the Sheet, filter `Angi_Live_Jobs`
+the sync. An attributed-leads API error is logged and does not cancel the sync;
+that run can omit attribution-only jobs and calls, but previously imported rows
+remain in the Sheet for a later refresh. The response's `jobMatches`,
+`unmatchedJobs`, `unmatchedSoldJobs`, and `enrichment` counts show match coverage.
+In the Sheet, filter `Angi_Live_Jobs`
 to blank `Booking_ID` to review Angi work that has not yet been tied to a lead.
 For the current single-technician cohort, the proposed per-technician metric is
 distinct `Booking_ID` values with `Is_Ran = TRUE` and `Has_Sold_Estimate = TRUE`
