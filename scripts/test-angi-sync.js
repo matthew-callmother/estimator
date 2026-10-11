@@ -18,6 +18,12 @@ assert.deepEqual(parseBookingSummary(summary), {
 });
 assert.equal(parseBookingSummary("* Lead Fee: unclear").leadFee, "");
 assert.equal(parseBookingSummary("* Lead Fee: $0.00").leadFee, 0);
+assert.equal(parseBookingSummary("* Lead Description: null - Repair or Install Gas Piping").partnerJobType,
+  "Repair or Install Gas Piping");
+assert.equal(parseBookingSummary("* Lead Description: Standard - Camera Locate Breakage for a Plumbing System").partnerJobType,
+  "Camera Locate Breakage for a Plumbing System");
+assert.equal(parseBookingSummary("* Partner Job type: Sewer Repair\n* Lead Description: null - Clean Out a Sewer").partnerJobType,
+  "Sewer Repair");
 
 const booking = {
   id: 10, createdOn: "2026-10-01T12:00:00Z", status: "Booked",
