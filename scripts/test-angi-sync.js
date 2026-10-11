@@ -270,6 +270,7 @@ async function testOptionalLookupFailure() {
     Object.keys(env).forEach((key) => { process.env[key] = "test"; });
     globalThis.fetch = async (url) => {
       if (String(url).includes("/connect/token")) return { ok: true, json: async () => ({ access_token: "test" }) };
+      if (String(url).includes("/attributed-leads")) return { ok: false, status: 400 };
       if (String(url).includes("/contacts") || String(url).includes("/locations/")) {
         return { ok: false, status: 403 };
       }
@@ -279,6 +280,7 @@ async function testOptionalLookupFailure() {
       return { ok: true, json: async () => ({ data: rows, hasMore: false }) };
     };
     const data = await fetchAngiData({ fromUtc: "2026-10-01", toUtc: "2026-10-08" });
+    assert.deepEqual(data.attributions, []);
     assert.equal(data.enrichmentStats.lookupErrors, 3);
     assert.equal(data.enrichmentStats.unresolvedCandidates, 1);
     assert.equal(buildAngiRows(data, "2026-10-08T00:00:00Z").stats.unmatchedJobs, 1);
