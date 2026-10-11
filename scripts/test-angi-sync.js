@@ -3,7 +3,7 @@
 const assert = require("node:assert/strict");
 const {
   BOOKING_HEADERS, JOB_HEADERS, OPPORTUNITY_HEADERS, ESTIMATE_HEADERS, INVOICE_HEADERS, CALL_HEADERS,
-  buildAngiRows, isAngiBooking, parseBookingSummary
+  buildAngiRows, fetchAngiData, isAngiBooking, parseBookingSummary
 } = require("../lib/servicetitan-angi");
 const { safeCell, upsertAngiRows } = require("../google-apps-script/angi-sync");
 
@@ -31,7 +31,8 @@ const booking = {
   summary, name: "Example Customer", address: { zip: "75062" }
 };
 assert.equal(isAngiBooking(booking), true);
-assert.equal(isAngiBooking({ ...booking, bookingProviderId: 85648468 }), false);
+assert.equal(isAngiBooking({ ...booking, bookingProviderId: 85648468 }), true);
+assert.equal(isAngiBooking({ ...booking, campaignId: 123, bookingProviderId: 85648468 }), false);
 const records = {
   bookings: [booking, { ...booking, id: 11, campaignId: 123 }, { ...booking, id: 12, jobId: 22 }],
   jobs: [
@@ -164,13 +165,94 @@ const unworked = buildAngiRows({
 assert.equal(unworked.opportunityRows[0][9], false);
 assert.equal(unworked.stats.linkedBookingsWithUnworkedAppointments, 1);
 assert.deepEqual(unworked.stats.unworkedLinkedAppointmentStatuses, { canceled: 1, scheduled: 1 });
+const matched = buildAngiRows({
+  bookings: [
+    { ...booking, id: 10, status: "Dismissed", address: { street: "100 Main Street", zip: "75062" } },
+    { ...booking, id: 11, address: { street: "200 Oak Road", zip: "75062" } },
+    { ...booking, id: 12, address: { street: "300 Elm Drive", zip: "75062" } }
+  ],
+  jobs: [
+    { id: 20, campaignId: 51241322, bookingId: 10, customerId: 91, locationId: 92 },
+    { id: 21, campaignId: 51241322, customerId: 93, locationId: 94 },
+    { id: 22, campaignId: 51241322, customerId: 95, locationId: 96 },
+    { id: 23, campaignId: 51241322, customerId: 97, locationId: 98 }
+  ],
+  bookingContacts: new Map([
+    ["10", [{ value: "first@example.com" }]],
+    ["11", [{ value: "second@example.com" }]],
+    ["12", [{ value: "third@example.com" }]]
+  ]),
+  customerContacts: new Map([
+    ["91", [{ value: "second@example.com" }]],
+    ["93", [{ value: "second@example.com" }]],
+    ["95", []]
+  ]),
+  locations: new Map([
+    ["92", { address: { street: "300 Elm Dr", zip: "75062" } }],
+    ["96", { address: { street: "300 Elm Dr", zip: "75062" } }]
+  ]),
+  invoices: [{ id: 50, jobId: 23, total: 500 }],
+  estimates: [{ id: 60, jobId: 23, status: "Sold", subtotal: 400 }],
+  attributions: [{ call: { id: 70 }, job: { id: 23 }, attribution: { stCampaignId: 51241322 } }]
+}, "2026-10-08T00:00:00Z");
+assert.deepEqual(matched.jobRows.map((row) => row[2]), [10, 11, 12, ""]);
+assert.equal(matched.bookingRows[0][4], "dismissed");
+assert.equal(matched.estimateRows[0][3], "");
+assert.equal(matched.invoiceRows[0][3], "");
+assert.equal(matched.callRows[0][5], false);
+assert.deepEqual(matched.stats.jobMatches, { booking_id: 1, email: 1, email_address: 0, address: 1 });
+assert.equal(matched.stats.unmatchedJobs, 1);
+assert.equal(matched.stats.unmatchedSoldJobs, 1);
+const ambiguous = buildAngiRows({
+  bookings: [
+    { ...booking, id: 10, address: { street: "100 Main St", zip: "75062" } },
+    { ...booking, id: 11, address: { street: "200 Oak Rd", zip: "75062" } }
+  ],
+  jobs: [{ id: 21, campaignId: 51241322, customerId: 93, locationId: 94 }],
+  bookingContacts: new Map([["10", [{ value: "shared@example.com" }]],
+    ["11", [{ value: "shared@example.com" }]]]),
+  customerContacts: new Map([["93", [{ value: "shared@example.com" }]]]),
+  locations: new Map([["94", { address: { street: "200 Oak Road", zip: "75062" } }]]),
+  invoices: [], estimates: [], attributions: []
+}, "2026-10-08T00:00:00Z");
+assert.equal(ambiguous.jobRows[0][2], 11);
+assert.equal(ambiguous.stats.jobMatches.email_address, 1);
+const unresolvedDuplicate = buildAngiRows({
+  bookings: [{ ...booking, id: 10, address: { street: "100 Main St", zip: "75062" } },
+    { ...booking, id: 11, address: { street: "100 Main St", zip: "75062" } }],
+  jobs: [{ id: 21, campaignId: 51241322, customerId: 93, locationId: 94 }],
+  bookingContacts: new Map([["10", [{ value: "shared@example.com" }]],
+    ["11", [{ value: "shared@example.com" }]]]),
+  customerContacts: new Map([["93", [{ value: "shared@example.com" }]]]),
+  locations: new Map([["94", { address: { street: "100 Main St", zip: "75062" } }]]),
+  invoices: [], estimates: [], attributions: []
+}, "2026-10-08T00:00:00Z");
+assert.equal(unresolvedDuplicate.jobRows[0][2], "");
+const attributed = buildAngiRows({
+  bookings: [{ ...booking, id: 10, campaignId: 123, bookingProviderId: 85648468 }],
+  jobs: [{ id: 20, campaignId: 51241322, bookingId: 10 },
+    { id: 21, campaignId: 51241322 }],
+  attributions: [{ job: { id: 21 }, booking: { id: 10 }, attribution: { stCampaignId: 51241322 } }],
+  invoices: [], estimates: []
+}, "2026-10-08T00:00:00Z");
+assert.equal(attributed.bookingRows.length, 1);
+assert.deepEqual(attributed.jobRows.map((row) => row[2]), [10, 10]);
+assert.equal(attributed.stats.jobMatches.booking_id, 2);
+const attributionOnly = buildAngiRows({
+  bookings: [{ ...booking, id: 10, campaignId: 123, bookingProviderId: 85648468 }],
+  jobs: [{ id: 21, campaignId: 51241322 }],
+  attributions: [{ job: { id: 21 }, booking: { id: 10 }, attribution: { stCampaignId: 51241322 } }],
+  invoices: [], estimates: []
+}, "2026-10-08T00:00:00Z");
+assert.equal(attributionOnly.bookingRows.length, 1);
+assert.equal(attributionOnly.jobRows[0][2], 10);
 assert.equal(safeCell("=IMPORTXML(\"example\")"), "'=IMPORTXML(\"example\")");
 
 const written = [];
 const sheet = {
   getLastRow: () => 1,
   getMaxRows: () => 1000,
-  getName: () => "Angi_API_Calls",
+  getName: () => "Angi_Live_Calls",
   getRange: (row, column, height, width) => ({
     setValues: (rows) => written.push({ row, column, height, width, rows })
   })
@@ -180,5 +262,59 @@ assert.deepEqual(upsertAngiRows(sheet, CALL_HEADERS, result.callRows), {
 });
 assert.equal(written.length, 1);
 assert.equal(written[0].height, 2);
-console.log("Angi parser and joins passed.");
+async function testOptionalLookupFailure() {
+  const previousFetch = globalThis.fetch;
+  const env = Object.fromEntries(["SERVICETITAN_CLIENT_ID", "SERVICETITAN_CLIENT_SECRET",
+    "SERVICETITAN_TENANT_ID", "SERVICETITAN_APP_KEY"].map((key) => [key, process.env[key]]));
+  try {
+    Object.keys(env).forEach((key) => { process.env[key] = "test"; });
+    globalThis.fetch = async (url) => {
+      if (String(url).includes("/connect/token")) return { ok: true, json: async () => ({ access_token: "test" }) };
+      if (String(url).includes("/contacts") || String(url).includes("/locations/")) {
+        return { ok: false, status: 403 };
+      }
+      const rows = String(url).includes("/bookings?") ? [booking]
+        : String(url).includes("/jobs?") ? [{ id: 20, campaignId: 51241322, customerId: 91, locationId: 92 }]
+          : [];
+      return { ok: true, json: async () => ({ data: rows, hasMore: false }) };
+    };
+    const data = await fetchAngiData({ fromUtc: "2026-10-01", toUtc: "2026-10-08" });
+    assert.equal(data.enrichmentStats.lookupErrors, 3);
+    assert.equal(data.enrichmentStats.unresolvedCandidates, 1);
+    assert.equal(buildAngiRows(data, "2026-10-08T00:00:00Z").stats.unmatchedJobs, 1);
+  } finally {
+    globalThis.fetch = previousFetch;
+    Object.entries(env).forEach(([key, value]) => {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    });
+  }
+}
 
+async function testOlderBookingLookup() {
+  const previousFetch = globalThis.fetch;
+  const env = Object.fromEntries(["SERVICETITAN_CLIENT_ID", "SERVICETITAN_CLIENT_SECRET",
+    "SERVICETITAN_TENANT_ID", "SERVICETITAN_APP_KEY"].map((key) => [key, process.env[key]]));
+  try {
+    Object.keys(env).forEach((key) => { process.env[key] = "test"; });
+    globalThis.fetch = async (url) => {
+      if (String(url).includes("/connect/token")) return { ok: true, json: async () => ({ access_token: "test" }) };
+      if (String(url).endsWith("/bookings/10")) return { ok: true, json: async () => booking };
+      const rows = String(url).includes("/jobs?") ? [{ id: 20, campaignId: 51241322, bookingId: 10 }] : [];
+      return { ok: true, json: async () => ({ data: rows, hasMore: false }) };
+    };
+    const data = await fetchAngiData({ fromUtc: "2026-10-01", toUtc: "2026-10-08" });
+    assert.equal(data.enrichmentStats.olderBookingsRecovered, 1);
+    assert.equal(buildAngiRows(data, "2026-10-08T00:00:00Z").jobRows[0][2], 10);
+  } finally {
+    globalThis.fetch = previousFetch;
+    Object.entries(env).forEach(([key, value]) => {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    });
+  }
+}
+
+testOptionalLookupFailure().then(testOlderBookingLookup)
+  .then(() => console.log("Angi parser and joins passed."))
+  .catch((error) => { console.error(error); process.exitCode = 1; });
