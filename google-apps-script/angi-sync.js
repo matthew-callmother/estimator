@@ -6,7 +6,7 @@ const ANGI_RUN_HEADERS = [
 ];
 const ANGI_ALLOWED_TABS = [
   "Angi_Live_Bookings", "Angi_Live_Jobs", "Angi_Live_Opportunities", "Angi_Live_Estimates", "Angi_Live_Invoices",
-  "Angi_Live_Calls", "Angi_Live_Sync_Runs"
+  "Angi_Live_Calls", "Angi_Live_Job_Origins", "Angi_Live_Sync_Runs"
 ];
 const ANGI_SPREADSHEET_ID = "1VRqenGE0QEvBEtfdl6GZZuKYJOl9TTkSjk14PSBV4wI";
 
@@ -26,6 +26,7 @@ function doPost(event) {
     const estimates = requiredSection(payload.estimates, "Angi_Live_Estimates");
     const invoices = requiredSection(payload.invoices, "Angi_Live_Invoices");
     const calls = requiredSection(payload.calls, "Angi_Live_Calls");
+    const origins = payload.origins ? requiredSection(payload.origins, "Angi_Live_Job_Origins") : null;
     const run = payload.run;
     if (!run || run.sheetName !== "Angi_Live_Sync_Runs" || !Array.isArray(run.values)) {
       throw new Error("Missing Angi sync run.");
@@ -37,6 +38,7 @@ function doPost(event) {
     const estimateSheet = ensureAngiSheet(spreadsheet, estimates.sheetName, estimates.headers);
     const invoiceSheet = ensureAngiSheet(spreadsheet, invoices.sheetName, invoices.headers);
     const callSheet = ensureAngiSheet(spreadsheet, calls.sheetName, calls.headers);
+    const originSheet = origins ? ensureAngiSheet(spreadsheet, origins.sheetName, origins.headers) : null;
     const runSheet = ensureAngiSheet(spreadsheet, run.sheetName, ANGI_RUN_HEADERS);
     const result = {
       bookings: upsertAngiRows(bookingSheet, bookings.headers, bookings.rows),
@@ -46,6 +48,10 @@ function doPost(event) {
       invoices: upsertAngiRows(invoiceSheet, invoices.headers, invoices.rows),
       calls: upsertAngiRows(callSheet, calls.headers, calls.rows)
     };
+    if (origins) {
+      const enriched = mergePersistedCallOrigins(origins.rows, callSheet);
+      result.origins = upsertAngiRows(originSheet, origins.headers, enriched);
+    }
     runSheet.appendRow(run.values.map(safeCell));
     SpreadsheetApp.flush();
     return angiJson({ ok: true, result });
@@ -54,6 +60,38 @@ function doPost(event) {
   } finally {
     if (lock.hasLock()) lock.releaseLock();
   }
+}
+
+function mergePersistedCallOrigins(origins, callSheet) {
+  const calls = callSheet.getLastRow() > 1
+    ? callSheet.getRange(2, 1, callSheet.getLastRow() - 1, 11).getValues() : [];
+  const byJob = new Map();
+  calls.forEach((call) => {
+    const jobId = String(call[4] || "");
+    if (!jobId || !call[2]) return;
+    if (!byJob.has(jobId)) byJob.set(jobId, []);
+    byJob.get(jobId).push(call);
+  });
+  return origins.map((origin) => {
+    if (origin[2] !== "unresolved") return origin;
+    const jobTime = Date.parse(origin[9]);
+    if (!Number.isFinite(jobTime)) return origin;
+    const eligible = [...new Map((byJob.get(String(origin[1])) || [])
+      .filter((call) => {
+        const callTime = Date.parse(call[1]);
+        return Number.isFinite(callTime) && callTime >= jobTime - 30 * 86400000
+          && callTime <= jobTime + 3600000;
+      })
+      .map((call) => [String(call[2]), call])).values()];
+    if (eligible.length !== 1) return origin;
+    const row = origin.slice();
+    row[2] = "call";
+    row[3] = String(eligible[0][2]);
+    row[5] = String(eligible[0][2]);
+    row[7] = JSON.stringify([String(eligible[0][2])]);
+    row[8] = "persisted_call_attribution";
+    return row;
+  });
 }
 
 function requiredSection(section, name) {
@@ -147,6 +185,5 @@ function angiJson(payload) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { requiredSection, safeCell, upsertAngiRows };
+  module.exports = { requiredSection, safeCell, upsertAngiRows, mergePersistedCallOrigins };
 }
-
