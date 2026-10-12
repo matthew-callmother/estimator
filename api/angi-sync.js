@@ -3,6 +3,7 @@
 const { randomUUID } = require("node:crypto");
 const {
   BOOKING_HEADERS, JOB_HEADERS, OPPORTUNITY_HEADERS, ESTIMATE_HEADERS, INVOICE_HEADERS, CALL_HEADERS,
+  ORIGIN_HEADERS,
   buildAngiRows, fetchAngiData
 } = require("../lib/servicetitan-angi");
 
@@ -26,7 +27,8 @@ module.exports = async function handler(req, res) {
       pageSize: integerEnv("ANGI_SYNC_PAGE_SIZE", 100, 1, 1000),
       maxPages: integerEnv("ANGI_SYNC_MAX_PAGES", 50, 1, 500)
     });
-    const { bookingRows, jobRows, opportunityRows, estimateRows, invoiceRows, callRows, stats } = buildAngiRows(records, toUtc);
+    const { bookingRows, jobRows, opportunityRows, estimateRows, invoiceRows, callRows, originRows, stats } =
+      buildAngiRows(records, toUtc);
     const dryRun = process.env.ANGI_SYNC_DRY_RUN !== "false";
     if (dryRun) {
       return res.status(200).json({
@@ -46,12 +48,14 @@ module.exports = async function handler(req, res) {
           firstVisitTechnicians: technicianPreview(opportunityRows),
           soldEstimateCount: estimateRows.length,
           invoiceCount: invoiceRows.length,
-          callOnlyCount: stats.callOnlyAttributions
+          callOnlyCount: stats.callOnlyAttributions,
+          jobOrigins: stats.jobOrigins
         }
       });
     }
     const result = await writeToAppsScript({
-      runId, fromUtc, toUtc, bookingRows, jobRows, opportunityRows, estimateRows, invoiceRows, callRows, stats
+      runId, fromUtc, toUtc, bookingRows, jobRows, opportunityRows, estimateRows, invoiceRows, callRows,
+      originRows, stats
     });
     return res.status(200).json({ ok: true, dryRun, runId, stats, sheet: result });
   } catch (error) {
@@ -61,7 +65,8 @@ module.exports = async function handler(req, res) {
 };
 
 async function writeToAppsScript({
-  runId, fromUtc, toUtc, bookingRows, jobRows, opportunityRows, estimateRows, invoiceRows, callRows, stats
+  runId, fromUtc, toUtc, bookingRows, jobRows, opportunityRows, estimateRows, invoiceRows, callRows,
+  originRows, stats
 }) {
   const url = String(process.env.ANGI_APPS_SCRIPT_WEBHOOK_URL || "").trim();
   const secret = String(process.env.ANGI_APPS_SCRIPT_WEBHOOK_SECRET || "").trim();
@@ -78,6 +83,7 @@ async function writeToAppsScript({
       estimates: { sheetName: "Angi_Live_Estimates", headers: ESTIMATE_HEADERS, rows: estimateRows },
       invoices: { sheetName: "Angi_Live_Invoices", headers: INVOICE_HEADERS, rows: invoiceRows },
       calls: { sheetName: "Angi_Live_Calls", headers: CALL_HEADERS, rows: callRows },
+      origins: { sheetName: "Angi_Live_Job_Origins", headers: ORIGIN_HEADERS, rows: originRows },
       run: { sheetName: "Angi_Live_Sync_Runs", values: [
         runId, fromUtc, toUtc, stats.angiBookings, stats.feesParsed, stats.angiJobs,
         stats.soldEstimates, stats.invoices, stats.bookingsWithJobs, stats.bookingsWithInvoices,
@@ -115,4 +121,3 @@ function technicianPreview(opportunityRows) {
   }
   return [...byId.values()].sort((a, b) => b.ranVisits - a.ranVisits || a.technicianId.localeCompare(b.technicianId));
 }
-
