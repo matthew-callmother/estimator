@@ -3,9 +3,10 @@
 const assert = require("node:assert/strict");
 const {
   BOOKING_HEADERS, JOB_HEADERS, OPPORTUNITY_HEADERS, ESTIMATE_HEADERS, INVOICE_HEADERS, CALL_HEADERS,
+  ORIGIN_HEADERS,
   buildAngiRows, fetchAngiData, isAngiBooking, parseBookingSummary
 } = require("../lib/servicetitan-angi");
-const { safeCell, upsertAngiRows } = require("../google-apps-script/angi-sync");
+const { safeCell, upsertAngiRows, mergePersistedCallOrigins } = require("../google-apps-script/angi-sync");
 
 const summary = [
   "* Partner Job type: 40115 Water Heater - Repair or Service",
@@ -200,7 +201,9 @@ assert.equal(matched.bookingRows[0][4], "dismissed");
 assert.equal(matched.estimateRows[0][3], "");
 assert.equal(matched.invoiceRows[0][3], "");
 assert.equal(matched.callRows[0][5], false);
-assert.deepEqual(matched.stats.jobMatches, { booking_id: 1, email: 1, email_address: 0, address: 1 });
+assert.deepEqual(matched.stats.jobMatches, {
+  booking_id: 1, email: 1, email_address: 0, address: 1, duplicate_booking_group: 0
+});
 assert.equal(matched.stats.unmatchedJobs, 1);
 assert.equal(matched.stats.unmatchedSoldJobs, 1);
 const ambiguous = buildAngiRows({
@@ -228,6 +231,65 @@ const unresolvedDuplicate = buildAngiRows({
   invoices: [], estimates: [], attributions: []
 }, "2026-10-08T00:00:00Z");
 assert.equal(unresolvedDuplicate.jobRows[0][2], "");
+const duplicateSummary = (leadId) => [
+  "* Partner Job type: 40115 Water Heater - Repair or Service",
+  "* Lead Fee: $52.95",
+  `* Lead Id: ${leadId}`
+].join("\n");
+const duplicateBookings = buildAngiRows({
+  bookings: [
+    { ...booking, id: 101, name: "Joseph Eric Jackson-Bey",
+      createdOn: "2026-08-20T01:14:51.379Z", summary: duplicateSummary(641126424),
+      address: { street: "1200 Richard Pittmon Drive", city: "LITTLE ELM", zip: "75115" } },
+    { ...booking, id: 102, name: "Joseph Eric Jackson-Bey",
+      createdOn: "2026-08-20T01:14:51.792Z", summary: duplicateSummary(641126426),
+      address: { street: "1200 Richard Pittmon Dr", city: "Little Elm", zip: "75115" } }
+  ],
+  jobs: [{ id: 201, campaignId: 51241322, customerId: 301, locationId: 401,
+    createdOn: "2026-08-20T01:31:29Z", jobStatus: "Completed" }],
+  locations: new Map([["401", { address: { street: "1200 Richard Pittmon Drive",
+    city: "Little Elm", zip: "75115" } }]]),
+  attributions: [{ dateTime: "2026-08-20T01:17:28Z", call: { id: 501 }, job: { id: 201 },
+    attribution: { stCampaignId: 51241322 } }],
+  estimates: [{ id: 601, jobId: 201, status: "Sold", subtotal: 450 }], invoices: []
+}, "2026-10-12T00:00:00Z");
+assert.equal(duplicateBookings.jobRows[0][2], 101);
+assert.equal(duplicateBookings.stats.jobMatches.duplicate_booking_group, 1);
+assert.equal(duplicateBookings.opportunityRows[0][21], 105.9);
+assert.equal(duplicateBookings.opportunityRows[1][10], "duplicate_booking");
+assert.equal(duplicateBookings.opportunityRows[1][21], 0);
+assert.equal(duplicateBookings.originRows[0][2], "booking");
+assert.equal(duplicateBookings.originRows[0][4], 101);
+assert.deepEqual(JSON.parse(duplicateBookings.originRows[0][6]), ["101", "102"]);
+assert.equal(duplicateBookings.originRows[0][5], "501");
+assert.equal(duplicateBookings.originRows[0].length, ORIGIN_HEADERS.length);
+const callOrigin = buildAngiRows({
+  bookings: [],
+  jobs: [
+    { id: 301, campaignId: 51241322, createdOn: "2026-07-24T17:07:13Z" },
+    { id: 302, campaignId: 51241322, createdOn: "2026-08-31T14:44:21Z" }
+  ],
+  attributions: [
+    { dateTime: "2026-07-24T17:02:26Z", call: { id: 701 }, job: { id: 301 },
+      attribution: { stCampaignId: 51241322 } },
+    { dateTime: "2026-09-09T15:55:00Z", call: { id: 702 }, job: { id: 302 },
+      attribution: { stCampaignId: 51241322 } }
+  ],
+  estimates: [{ id: 801, jobId: 301, status: "Sold", subtotal: 15000 }], invoices: []
+}, "2026-10-12T00:00:00Z");
+assert.deepEqual(callOrigin.originRows.map((row) => row[2]), ["call", "unresolved"]);
+assert.equal(callOrigin.originRows[0][5], "701");
+assert.equal(callOrigin.originRows[1][5], "");
+const savedCall = ["call:701", "2026-07-24T17:02:26Z", "701", "", "301", false,
+  "Angie's List", "Angi", "51241322", "", "2026-10-12T00:00:00Z"];
+const persisted = mergePersistedCallOrigins(callOrigin.originRows.map((row) => row[2] === "call"
+  ? [row[0], row[1], "unresolved", "", "", "", "[]", "[]", "unresolved", ...row.slice(9)] : row), {
+  getLastRow: () => 2,
+  getRange: () => ({ getValues: () => [savedCall] })
+});
+assert.equal(persisted[0][2], "call");
+assert.equal(persisted[0][8], "persisted_call_attribution");
+assert.equal(persisted[1][2], "unresolved");
 const attributed = buildAngiRows({
   bookings: [{ ...booking, id: 10, campaignId: 123, bookingProviderId: 85648468 }],
   jobs: [{ id: 20, campaignId: 51241322, bookingId: 10 },
