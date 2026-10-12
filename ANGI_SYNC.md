@@ -16,7 +16,7 @@ The production cron is scheduled daily at 10:17 UTC. It must have
 The only destination is the existing [Mother Angi Operations Database](https://docs.google.com/spreadsheets/d/1VRqenGE0QEvBEtfdl6GZZuKYJOl9TTkSjk14PSBV4wI/edit).
 The v3 writer touches only `Angi_Live_Bookings`, `Angi_Live_Jobs`,
 `Angi_Live_Opportunities`, `Angi_Live_Estimates`, `Angi_Live_Invoices`,
-`Angi_Live_Calls`, and `Angi_Live_Sync_Runs`; the workbook's original and
+`Angi_Live_Calls`, `Angi_Live_Job_Origins`, and `Angi_Live_Sync_Runs`; the workbook's original and
 older `Angi_API_*` tabs are not modified. A tab with an unexpected header
 layout causes the write to fail rather than silently overwriting it.
 
@@ -25,8 +25,11 @@ layout causes the write to fail rather than silently overwriting it.
   lead fees here, not on joined job or invoice rows.
 - `Angi_Live_Jobs`: one row per Angi-campaign job or job linked to an Angi
   booking. The match order is booking ID (including a direct attribution),
-  unique customer email, then unique full street address and ZIP. A duplicate
-  or missing match leaves `Booking_ID` blank; the job and its sale still import.
+  unique customer email, then unique full street address and ZIP. Bookings
+  with the same person, address, service, and creation time within five minutes
+  form one attribution group; the earliest booking is the group's canonical ID.
+  Other ambiguous or missing matches leave `Booking_ID` blank; the job and its
+  sale still import. City case does not affect address matching.
   `Sold_By_ID` uses `job.soldById` first, then the largest
   sold estimate's `soldBy`. `Sold_By_Source` and `Sold_By_Conflict` make that
   outcome attribution auditable. This is **not** the person who ran the initial
@@ -41,8 +44,11 @@ layout causes the write to fail rather than silently overwriting it.
   when exactly one technician was on the first worked visit. `Is_Ran` and
   `Attribution_Status` expose missing visits or assignments. `Has_Sold_Estimate`
   is true when any linked job has a sold estimate; the primary estimate is the
-  largest sold subtotal. Do not sum sold subtotals or lead fees from this tab
-  together with their source tabs.
+  largest sold subtotal. A noncanonical booking in a matched duplicate group
+  has `Attribution_Status = duplicate_booking` and a zero opportunity fee. The
+  canonical row carries the sum of distinct Angi lead IDs' fees in that group.
+  Exclude `duplicate_booking` rows from opportunity counts. The raw booking
+  tab still has both original rows and fees. Do not combine the two tabs' fees.
 - `Angi_Live_Estimates`: one row per sold estimate on an Angi job, including
   unmatched jobs with blank `Booking_ID`. Only
   `Is_Primary_For_Job = TRUE` identifies the largest sold estimate for a job;
@@ -52,6 +58,16 @@ layout causes the write to fail rather than silently overwriting it.
 - `Angi_Live_Calls`: attributed Angi calls. `Is_Booking_Linked` tells the
   dashboard whether a call is already represented by a booking row. Count
   call-only leads only where this value is `FALSE`.
+- `Angi_Live_Job_Origins`: one row per Angi job, including sold work with no
+  booking. `Source_Type` is `booking`, `call`, `ambiguous_booking`,
+  `ambiguous_call`, or `unresolved`. `Source_ID` is a real booking or call ID
+  only for confirmed single-source matches. Candidate ID arrays show uncertain
+  matches without assigning a sale to one. A call counts as the job origin only
+  when it is explicitly attributed to that job and occurred from 30 days before
+  to one hour after job creation. The writer can recover that call link from
+  previously synced `Angi_Live_Calls` rows if ServiceTitan attribution is
+  temporarily unavailable. Join this tab to jobs and estimates by `Job_ID`;
+  never interpret a blank `Booking_ID` as a lost sale.
 - `Angi_Live_Sync_Runs`: one audit row for each successful write.
 
 All tables use stable `Record_Key` values for upsert. The appointment-assignment
@@ -82,7 +98,8 @@ divided by distinct `Booking_ID` values with `Is_Ran = TRUE`, grouped by
    has the `google-apps-script/angi-sync.js` writer deployed as a web app,
    executing as the work account. Its `ANGI_SYNC_WEBHOOK_SECRET` script property
    matches the Vercel secret. The writer created all seven `Angi_Live_*` tabs
-   without changing older tabs.
+   without changing older tabs. After changing this writer, deploy a new Apps
+   Script web-app version before expecting `Angi_Live_Job_Origins` to populate.
 2. The Vercel `estimator` project has `ANGI_APPS_SCRIPT_WEBHOOK_URL` and
    `ANGI_APPS_SCRIPT_WEBHOOK_SECRET` for Preview and Production. A live Preview
    sync on October 9, 2026 wrote 1,743 Angi bookings, 513 linked jobs, 156 sold
