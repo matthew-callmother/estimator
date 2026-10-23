@@ -2,9 +2,10 @@
   "name": "estimator",
   "private": true,
   "scripts": {
-    "check": "node --check app.js && node --check api/bookings.js"
+    "check": "node --check app.js && node --check api/bookings.js && node --test scripts/test-quiz-analytics.js"
   },
   "engines": {
     "node": "22.x"
   }
 }
+

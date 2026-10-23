@@ -36,6 +36,12 @@
   ]);
   const UTM_PARAMS = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"];
   const CLICK_ID_PARAMS = ["gclid", "gbraid", "wbraid", "msclkid", "fbclid", "ttclid"];
+  const ANALYTICS_FIELDS = new Set([
+    "estimator_id", "quiz_name", "config_version", "step_id", "step_type",
+    "step_number", "step_total", "question_id", "answer_id", "answer_label",
+    "answer_value", "result_id", "lead_stage", "service_area_status",
+    "backend_status", "status_code", "source", "error_code", "has_cover"
+  ]);
 
   /* ---------------- Helpers ---------------- */
   const qs = (sel, root = document) => root.querySelector(sel);
@@ -43,6 +49,20 @@
   const normalizePhone = (s) => String(s || "").replace(/\D/g, "");
   const isEmpty = (v) => v === null || v === undefined || String(v).trim() === "";
   const safeStr = (v) => String(v == null ? "" : v).trim();
+
+  function emitQuizEvent(name, details = {}) {
+    const event = { event: name };
+    Object.entries(details).forEach(([key, value]) => {
+      if (!ANALYTICS_FIELDS.has(key)) return;
+      if (typeof value === "string") event[key] = value.slice(0, 100);
+      else if (typeof value === "number" && Number.isFinite(value)) event[key] = value;
+      else if (typeof value === "boolean") event[key] = value;
+    });
+
+    window.dataLayer = window.dataLayer || [];
+    if (Array.isArray(window.dataLayer)) window.dataLayer.push(event);
+    window.dispatchEvent(new CustomEvent("wh-estimator-event", { detail: event }));
+  }
 
   function getConfigUrl() {
     return window.WH_ESTIMATOR_CONFIG_URL || SCRIPT_DATA.configUrl || DEFAULT_CONFIG_URL;
@@ -1334,7 +1354,8 @@
     }
 
     const features = getFeatures(cfg);
-    mount.dataset.estimatorId = cfg.estimatorId || cfg.meta?.estimatorId || "default";
+    const estimatorId = cfg.estimatorId || cfg.meta?.estimatorId || "default";
+    mount.dataset.estimatorId = estimatorId;
     loadServiceAreaIfNeeded(features);
     const state = loadEstimatorState(cfg, qmap);
 
@@ -1344,9 +1365,62 @@
       return;
     }
 
+    const track = (name, details = {}) => emitQuizEvent(name, {
+      estimator_id: estimatorId,
+      quiz_name: cfg.quizName || cfg.title || estimatorId,
+      config_version: String(cfg.version || cfg.meta?.version || ""),
+      ...details
+    });
+    const serviceAreaLabel = (status) => !status?.checked
+      ? "unknown"
+      : status.eligible ? "in_area" : "out_of_area";
+    const trackStep = (name, q) => {
+      const progress = calculateProgress(qmap, cfg, state);
+      track(name, {
+        step_id: q.id,
+        step_type: q.type,
+        step_number: progress.currentStep,
+        step_total: progress.total
+      });
+    };
+    const trackAnswers = (q) => {
+      const questions = q.type === "question_group" ? q.items || [] : [q];
+      questions.forEach((question) => {
+        if (question.type === "slider") {
+          const value = Number(state.answers[question.id]);
+          if (Number.isFinite(value)) track("estimator_answer", {
+            step_id: q.id,
+            question_id: question.id,
+            answer_value: value
+          });
+          return;
+        }
+        if (question.type !== "single_select" && question.type !== "multi_select") return;
+        const selected = Array.isArray(state.answers[question.id])
+          ? state.answers[question.id]
+          : [state.answers[question.id]];
+        selected.forEach((value) => {
+          const option = (question.options || []).find((item) => String(item.value) === String(value));
+          if (!option) return;
+          track("estimator_answer", {
+            step_id: q.id,
+            question_id: question.id,
+            answer_id: String(option.value),
+            answer_label: String(option.label || option.value)
+          });
+        });
+      });
+    };
+    const completeStep = (q) => {
+      trackStep("estimator_step_complete", q);
+      trackAnswers(q);
+    };
+    track("estimator_loaded", { has_cover: hasCover(cfg) });
+
     let renderQueued = false;
     let lastRenderedStepId = null;
     let lastRenderedProgressPercent = null;
+    let lastTrackedStepId = null;
     const scheduleRender = () => {
       if (renderQueued) return;
       renderQueued = true;
@@ -1848,6 +1922,10 @@
         class: "quiz_next-button quiz_cover-button",
         type: "button",
         onClick: () => {
+          if (!state.meta.analytics_started) {
+            state.meta.analytics_started = true;
+            track("estimator_start", { source: "cover" });
+          }
           state.meta.cover_seen = true;
           saveState(state, cfg);
           lastRenderedStepId = null;
@@ -1872,6 +1950,10 @@
       ]);
 
       mount.appendChild(container);
+      if (lastTrackedStepId !== "__cover") {
+        track("estimator_cover_view");
+        lastTrackedStepId = "__cover";
+      }
       lastRenderedStepId = "__cover";
     }
 
@@ -2065,6 +2147,8 @@
 
       if (!nextId) return;
 
+      completeStep(current);
+
       const nextQ = getQuestion(qmap, nextId);
       if (nextQ?.type === "loading_lookup" && !features.permitLookup) {
         const afterId = nextQ.next || null;
@@ -2117,6 +2201,7 @@
 
     function handleBack() {
       if (!state.history.length) return;
+      track("estimator_back", { step_id: state.currentId });
       state.currentId = state.history.pop();
       saveState(state, cfg);
       scheduleRender();
@@ -2126,7 +2211,9 @@
       const confirmed = window.confirm("Start this quiz over? Your answers will be cleared.");
       if (!confirmed) return;
 
+      track("estimator_restart", { step_id: state.currentId });
       resetEstimatorState(cfg, state);
+      lastTrackedStepId = null;
       saveState(state, cfg);
       scheduleRender();
     }
@@ -2221,6 +2308,10 @@
       const payload = buildBookingPayload(null, serviceAreaStatus);
       payload.leadStage = stage;
       payload.bookingAction = "record_only";
+      if (stage === "result_gate") track("estimator_email_submitted", {
+        step_id: state.currentId,
+        service_area_status: serviceAreaLabel(serviceAreaStatus)
+      });
 
       try {
         const response = await fetch(getBookingEndpoint(), {
@@ -2229,16 +2320,32 @@
           body: JSON.stringify(payload)
         });
 
+        const responseData = await response.json().catch(() => ({}));
         if (!response.ok) {
           console.warn(`Lead checkpoint failed with status ${response.status}`);
+          track("estimator_lead_checkpoint_error", {
+            lead_stage: stage,
+            backend_status: "rejected",
+            status_code: response.status
+          });
           return { ok: false, status: response.status };
         }
 
         state.meta.lead_checkpoint_sigs[stage] = sig;
         saveState(state, cfg);
-        return await response.json().catch(() => ({ ok: true }));
+        track("estimator_lead_checkpoint", {
+          lead_stage: stage,
+          service_area_status: serviceAreaLabel(serviceAreaStatus),
+          backend_status: responseData.lead?.recorded === true ? "recorded"
+            : responseData.lifecycle?.delivered === true ? "provider_delivered" : "accepted_unstored"
+        });
+        return responseData;
       } catch (error) {
         console.warn("Lead checkpoint failed:", error);
+        track("estimator_lead_checkpoint_error", {
+          lead_stage: stage,
+          backend_status: "request_failed"
+        });
         return { ok: false, error: error?.message || "Lead checkpoint failed" };
       }
     }
@@ -2300,6 +2407,14 @@
         mount.innerHTML = "<p>Missing question in config.</p>";
         return;
       }
+      if (!state.meta.analytics_started) {
+        const resumed = hasQuizProgress(cfg, state);
+        track(resumed ? "estimator_resume" : "estimator_start", {
+          source: resumed ? "stored_state" : "first_question"
+        });
+        state.meta.analytics_started = true;
+        saveState(state, cfg);
+      }
       const isNewStep = q.id !== lastRenderedStepId;
     
       // refresh-on-loading: skip
@@ -2341,6 +2456,7 @@
           nextBtn.disabled = true;
           const originalLabel = nextBtn.textContent;
           if (isSubmitAction) {
+            track("estimator_submit_attempt", { step_id: q.id });
             nextBtn.textContent = "Submitting...";
             showSubmitMessage(submitMessage, "pending", q.pending_label || "Submitting...");
           }
@@ -2348,6 +2464,20 @@
           try {
             const result = await handleNext(q);
             if (isSubmitAction) {
+              completeStep(q);
+              if (result?.bookingId) {
+                track("estimator_booking_created", {
+                  step_id: q.id,
+                  backend_status: "created"
+                });
+              } else {
+                track("estimator_submit_unconfirmed", {
+                  step_id: q.id,
+                  backend_status: result?.outOfArea ? "out_of_area"
+                    : result?.dryRun ? "dry_run"
+                      : result?.skippedBackend ? "disabled" : "missing_booking_id"
+                });
+              }
               const successMessage = result?.outOfArea
                 ? (result.message || "Unfortunately, we are not in your service area yet.")
                 : result?.dryRun
@@ -2366,6 +2496,11 @@
           } catch (error) {
             console.error(error);
             if (isSubmitAction) {
+              track("estimator_submit_error", {
+                step_id: q.id,
+                backend_status: "request_failed",
+                error_code: "request_failed"
+              });
               showSubmitMessage(submitMessage, "error", error?.message || "We couldn't submit this request. Please try again.");
             } else {
               alert(error?.message || "We couldn't submit this request. Please try again.");
@@ -2440,6 +2575,14 @@
       mount.appendChild(container);
       animateProgressBar(progress);
       initializeTooltips(container);
+      if (isNewStep && lastTrackedStepId !== q.id) {
+        trackStep("estimator_step_view", q);
+        if (q.type === "result") track("estimator_result_view", {
+          result_id: q.id,
+          service_area_status: serviceAreaLabel(getStoredServiceAreaStatus(state))
+        });
+        lastTrackedStepId = q.id;
+      }
       lastRenderedStepId = q.id;
     }
 
@@ -2450,4 +2593,5 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 })();
+
 

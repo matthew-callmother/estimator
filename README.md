@@ -29,6 +29,11 @@ If the estimator script is embedded on Webflow, point the widget at both the est
 
 Future estimators can reuse the same `app.js` by changing only `data-config-url`.
 
+The same script emits anonymous quiz funnel and fixed-choice events to GTM's
+`dataLayer` for GA4. No quiz-specific tracking configuration is required. See
+[`ANALYTICS_DASHBOARD.md`](ANALYTICS_DASHBOARD.md) for the event contract,
+privacy boundary, and how to join GA4 metrics to a quiz config.
+
 You can also set `window.WH_ESTIMATOR_CONFIG_URL`, `window.WH_ESTIMATOR_MUNICIPALITIES_URL`, or `window.WH_ESTIMATOR_BOOKING_ENDPOINT` before loading `app.js`.
 
 ## ServiceTitan notes
@@ -93,3 +98,4 @@ Configs can generate the visible range from the exact total:
 ```
 
 Existing configs that already provide `low` and `high` still work. By default the app can respect explicit ranges, but `force_generated: true` tells the app to ignore those values for display and generate the range from `exact`.
+
