@@ -2,7 +2,7 @@
   "meta": {
     "estimatorId": "tankless-or-not",
     "serviceName": "Tankless water heater quiz",
-    "version": "tankless-or-not-v1"
+    "version": "tankless-or-not-v2"
   },
   "estimatorId": "tankless-or-not",
   "quizName": "Should I Buy a Tankless?",
@@ -82,218 +82,33 @@
           }
         }
       ],
-      "next": "current_type"
-    },
-    {
-      "id": "current_type",
-      "type": "single_select",
-      "title": "What kind of water heater do you currently have?",
-      "subtitle": "This helps us understand your starting point.",
-      "options": [
-        {
-          "value": "tank",
-          "label": "Water heater tank",
-          "scores": {},
-          "next": "tank_size"
-        },
-        {
-          "value": "hybrid",
-          "label": "Hybrid water heater",
-          "scores": {},
-          "next": "hybrid_size"
-        },
-        {
-          "value": "new",
-          "label": "Building a new home and want to pick",
-          "scores": {},
-          "next": "people"
-        }
-      ]
-    },
-    {
-      "id": "tank_size",
-      "type": "single_select",
-      "title": "What tank size do you have?",
-      "subtitle": "No problem if you are not sure.",
-      "options": [
-        {
-          "value": "50g",
-          "label": "50 gallon",
-          "scores": {
-            "gas_tank": 1,
-            "electric_tank": 1
-          }
-        },
-        {
-          "value": "75g",
-          "label": "75 gallon",
-          "scores": {
-            "gas_tank": 2,
-            "electric_tank": 2
-          }
-        },
-        {
-          "value": "100g",
-          "label": "100 gallon",
-          "scores": {
-            "gas_tank": 3,
-            "dual_tank": 1
-          }
-        },
-        {
-          "value": "not_sure",
-          "label": "I'm not sure",
-          "scores": {}
-        }
-      ],
-      "next": "people"
-    },
-    {
-      "id": "hybrid_size",
-      "type": "single_select",
-      "title": "What size is your hybrid water heater?",
-      "subtitle": "No problem if you are not sure.",
-      "options": [
-        {
-          "value": "50h",
-          "label": "50 gallon",
-          "scores": {
-            "heat_pump": 2
-          }
-        },
-        {
-          "value": "65h",
-          "label": "65 gallon",
-          "scores": {
-            "heat_pump": 2
-          }
-        },
-        {
-          "value": "80h",
-          "label": "80 gallon",
-          "scores": {
-            "heat_pump": 3
-          }
-        },
-        {
-          "value": "not_sure",
-          "label": "I'm not sure",
-          "scores": {}
-        }
-      ],
-      "next": "people"
-    },
-    {
-      "id": "people",
-      "type": "single_select",
-      "title": "How many people are in the home?",
-      "subtitle": "This helps estimate hot water demand.",
-      "options": [
-        {
-          "value": "1_2",
-          "label": "1-2",
-          "scores": {
-            "electric_tank": 2,
-            "heat_pump": 1
-          }
-        },
-        {
-          "value": "3_4",
-          "label": "3-4",
-          "scores": {
-            "gas_tank": 1,
-            "gas_tankless": 1
-          }
-        },
-        {
-          "value": "5_plus",
-          "label": "5+",
-          "scores": {
-            "gas_tankless": 3,
-            "dual_tank": 1
-          }
-        }
-      ],
-      "next": "num_heaters"
-    },
-    {
-      "id": "num_heaters",
-      "type": "single_select",
-      "title": "How many water heaters do you have?",
-      "subtitle": "Count separate water heater units.",
-      "options": [
-        {
-          "value": "1h",
-          "label": "1",
-          "scores": {}
-        },
-        {
-          "value": "2h",
-          "label": "2",
-          "scores": {
-            "dual_tank": 2
-          }
-        }
-      ],
-      "next": "location"
-    },
-    {
-      "id": "location",
-      "type": "single_select",
-      "title": "Where is it located?",
-      "subtitle": "Access and ventilation can affect the best fit.",
-      "options": [
-        {
-          "value": "garage",
-          "label": "Garage",
-          "scores": {
-            "gas_tankless": 1,
-            "heat_pump": 1
-          }
-        },
-        {
-          "value": "attic",
-          "label": "Attic",
-          "scores": {
-            "gas_tank": 1,
-            "electric_tank": 1
-          }
-        },
-        {
-          "value": "closet",
-          "label": "Hall closet",
-          "scores": {
-            "heat_pump": 2
-          }
-        }
-      ],
       "next": "fuel"
     },
     {
       "id": "fuel",
       "type": "single_select",
-      "title": "What fuel source does your home use?",
-      "subtitle": "If your heater has a yellow flexible line, it is usually natural gas.",
-      "help": "If your heater has a yellow flexible line, it is usually natural gas.",
+      "title": "What fuel can your home use?",
+      "subtitle": "Choose what's available where the heater would go.",
+      "help": "If you're unsure, check whether your home has a gas meter or propane tank.",
       "options": [
         {
           "value": "gas",
-          "label": "Gas",
+          "label": "Natural gas",
           "scores": {
             "gas_tankless": 2,
             "gas_tank": 2
-          },
-          "next": "baths"
+          }
         },
         {
           "value": "electric",
-          "label": "Electric",
+          "label": "Electric only",
           "scores": {
+            "gas_tankless": -100,
+            "gas_tank": -100,
             "electric_tank": 3,
             "heat_pump": 2,
             "dual_tank": 1
-          },
-          "next": "elec_guardrail"
+          }
         },
         {
           "value": "propane",
@@ -301,94 +116,116 @@
           "scores": {
             "gas_tankless": 2,
             "gas_tank": 2
-          },
-          "next": "baths"
-        }
-      ]
-    },
-    {
-      "id": "elec_guardrail",
-      "type": "single_select",
-      "title": "Note on electric and tankless",
-      "subtitle": "Electric-only homes are usually better served by keeping a tank setup, using a heat pump, or adding a second tank.",
-      "help": "If your home is electric-only, we recommend keeping your setup or adding a second tank in parallel rather than switching to tankless.",
-      "options": [
-        {
-          "value": "ack",
-          "label": "Got it",
-          "scores": {
-            "electric_tank": 1,
-            "dual_tank": 1,
-            "heat_pump": 1
           }
         }
       ],
-      "next": "baths"
+      "next": "current_type"
     },
     {
-      "id": "baths",
+      "id": "current_type",
       "type": "single_select",
-      "title": "How many bathrooms does your home have?",
-      "subtitle": "This helps estimate peak hot water demand.",
+      "title": "What water heater do you have now?",
       "options": [
         {
-          "value": "1_2b",
-          "label": "1-2",
+          "value": "tank",
+          "label": "Tank",
+          "image_url": "https://matthew-callmother.github.io/estimator/assets/tankless-or-not-gas-tank.webp",
           "scores": {
-            "electric_tank": 1,
-            "gas_tank": 1
-          }
-        },
-        {
-          "value": "2_5_4b",
-          "label": "2.5-4",
-          "scores": {
-            "gas_tankless": 2,
             "gas_tank": 1,
-            "heat_pump": 1
+            "electric_tank": 1,
+            "dual_tank": 3
           }
         },
         {
-          "value": "4_5_plus_b",
-          "label": "4.5+",
-          "scores": {
-            "gas_tankless": 3,
-            "dual_tank": 2
-          }
+          "value": "hybrid",
+          "label": "Heat pump (hybrid)",
+          "image_url": "https://matthew-callmother.github.io/estimator/assets/tankless-or-not-heat-pump.webp",
+          "scores": { "heat_pump": 3, "dual_tank": -100 }
+        },
+        {
+          "value": "tankless",
+          "label": "Tankless",
+          "image_url": "https://matthew-callmother.github.io/estimator/assets/tankless-or-not-gas-tankless.webp",
+          "scores": { "gas_tankless": 2, "dual_tank": -100 }
+        },
+        {
+          "value": "new",
+          "label": "No heater yet / new home",
+          "scores": { "dual_tank": -100 }
+        },
+        {
+          "value": "not_sure",
+          "label": "I'm not sure",
+          "scores": { "dual_tank": -100 }
         }
       ],
-      "next": "stories"
+      "next": "demand"
     },
     {
-      "id": "stories",
-      "type": "single_select",
-      "title": "Is your home 1 or 2 stories?",
-      "subtitle": "Home layout can affect installation requirements.",
-      "options": [
+      "id": "demand",
+      "type": "question_group",
+      "layout": "rows",
+      "control": "segmented",
+      "title": "How much hot water does your home need?",
+      "items": [
         {
-          "value": "1s",
-          "label": "1 story",
-          "scores": {
-            "gas_tank": 1,
-            "electric_tank": 1
-          },
-          "next": "result_gate"
+          "id": "people",
+          "type": "single_select",
+          "label": "People at home",
+          "options": [
+            { "value": "1_2", "label": "1-2", "scores": { "electric_tank": 2, "heat_pump": 1 } },
+            { "value": "3_4", "label": "3-4", "scores": { "gas_tank": 1, "gas_tankless": 1 } },
+            { "value": "5_plus", "label": "5+", "scores": { "gas_tankless": 3, "dual_tank": 1 } }
+          ]
         },
         {
-          "value": "2s",
-          "label": "2 story",
-          "scores": {
-            "gas_tankless": 1
-          },
-          "next": "result_gate"
+          "id": "baths",
+          "type": "single_select",
+          "label": "Bathrooms",
+          "options": [
+            { "value": "1_2b", "label": "1-2", "scores": { "electric_tank": 1, "gas_tank": 1 } },
+            { "value": "2_5_4b", "label": "2.5-4", "scores": { "gas_tankless": 2, "gas_tank": 1, "heat_pump": 1 } },
+            { "value": "4_5_plus_b", "label": "4.5+", "scores": { "gas_tankless": 3, "dual_tank": 2 } }
+          ]
         }
-      ]
+      ],
+      "next": "location"
+    },
+    {
+      "id": "location",
+      "type": "single_select",
+      "title": "Where would the new heater go?",
+      "options": [
+        {
+          "value": "garage",
+          "label": "Garage",
+          "image_url": "https://matthew-callmother.github.io/estimator/assets/tankless-or-not-location-garage.webp",
+          "scores": { "gas_tankless": 1, "heat_pump": 1 }
+        },
+        {
+          "value": "attic",
+          "label": "Attic",
+          "image_url": "https://matthew-callmother.github.io/estimator/assets/tankless-or-not-location-attic.webp",
+          "scores": { "gas_tank": 1, "electric_tank": 1 }
+        },
+        {
+          "value": "closet",
+          "label": "Hall closet",
+          "image_url": "https://matthew-callmother.github.io/estimator/assets/tankless-or-not-location-closet.webp",
+          "scores": { "gas_tank": 1, "electric_tank": 1, "heat_pump": -2 }
+        },
+        {
+          "value": "not_sure",
+          "label": "I'm not sure"
+        }
+      ],
+      "next": "result_gate"
     },
     {
       "id": "result_gate",
       "type": "form",
-      "title": "Where should we send your result?",
-      "subtitle": "Enter your name, email, and ZIP code to see your recommendation.",
+      "title": "See your recommendation",
+      "subtitle": "Enter your name, email, and ZIP code to view it.",
       "result_gate": true,
       "fields": [
         {
@@ -425,6 +262,7 @@
     {
       "id": "booking_capture",
       "type": "form",
+      "progress_counted": false,
       "title": "Want help choosing the right water heater?",
       "subtitle": "You're in our service area. Share your phone and service address so we can follow up.",
       "fields": [
@@ -483,7 +321,8 @@
     {
       "id": "gas_tankless",
       "title": "Gas Tankless",
-      "message": "Best for households with high demand, multiple bathrooms, or large families. Offers endless hot water with proper gas supply and venting.",
+      "message": "Tankless may fit your hot-water needs. Have a plumber check fuel supply and venting before you buy.",
+      "image_url": "https://matthew-callmother.github.io/estimator/assets/tankless-or-not-gas-tankless.webp",
       "tie_priority": 50,
       "tie_breaker_reason": "Your answers are balanced, so we recommend gas tankless when demand, bathrooms, or endless hot water are major factors.",
       "availability": {
@@ -502,7 +341,8 @@
     {
       "id": "gas_tank",
       "title": "Gas Tank",
-      "message": "A great low-cost upgrade if you already have gas service. Reliable and simple installation for small to medium households.",
+      "message": "A gas tank may meet your needs for less upfront cost. A plumber can confirm the right size.",
+      "image_url": "https://matthew-callmother.github.io/estimator/assets/tankless-or-not-gas-tank.webp",
       "tie_priority": 40,
       "tie_breaker_reason": "Your answers are balanced, so we recommend a gas tank when lower upfront cost and simple replacement matter most.",
       "availability": {
@@ -521,7 +361,8 @@
     {
       "id": "electric_tank",
       "title": "Electric Tank",
-      "message": "A straightforward option for electric-only homes. Consider adding a second tank to increase hot-water capacity.",
+      "message": "An electric tank may be the simplest fit. A plumber can check the size and your home's electrical capacity.",
+      "image_url": "https://matthew-callmother.github.io/estimator/assets/tankless-or-not-electric-tank.webp",
       "tie_priority": 30,
       "tie_breaker_reason": "Your answers are balanced, so we recommend an electric tank when the home appears electric-only and simplicity matters.",
       "availability": {
@@ -540,7 +381,8 @@
     {
       "id": "heat_pump",
       "title": "Heat Pump (Hybrid)",
-      "message": "High-efficiency choice for electric homes with space for airflow. Delivers long-term savings with lower energy use.",
+      "message": "A heat pump may use less energy, but it needs enough air and a place for condensate. Check the space before buying.",
+      "image_url": "https://matthew-callmother.github.io/estimator/assets/tankless-or-not-heat-pump.webp",
       "tie_priority": 20,
       "tie_breaker_reason": "Your answers are balanced, so we recommend a heat pump when efficiency and long-term utility savings matter most.",
       "availability": {
@@ -559,7 +401,8 @@
     {
       "id": "dual_tank",
       "title": "Add a Second Tank (Parallel)",
-      "message": "Adding a second tank boosts peak capacity without needing extra power or gas lines - perfect for large families.",
+      "message": "A second tank may help when several people need hot water at once. Have a plumber check space, power, and piping.",
+      "image_url": "https://matthew-callmother.github.io/estimator/assets/tankless-or-not-dual-tank.webp",
       "tie_priority": 10,
       "tie_breaker_reason": "Your answers are balanced, so we recommend adding a second tank when capacity is the concern but a full conversion may not be necessary.",
       "availability": {

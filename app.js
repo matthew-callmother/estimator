@@ -16,7 +16,7 @@
   const ATTRIBUTION_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
   const STATE_SCHEMA_VERSION = 2;
   const STATE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
-  const PROGRESS_COUNTED_TYPES = new Set(["single_select", "multi_select", "slider", "form", "summary"]);
+  const PROGRESS_COUNTED_TYPES = new Set(["single_select", "multi_select", "slider", "form", "question_group", "summary"]);
   const CANONICAL_LEAD_FIELD_IDS = new Set([
     "contact_name",
     "contact_phone",
@@ -520,7 +520,12 @@
   /* ---------------- Config helpers ---------------- */
   function indexQuestions(cfg) {
     const map = new Map();
-    (cfg.questions || []).forEach((q) => map.set(q.id, q));
+    (cfg.questions || []).forEach((q) => {
+      map.set(q.id, q);
+      if (q.type === "question_group") {
+        (q.items || []).forEach((item) => map.set(item.id, item));
+      }
+    });
     (cfg.results || []).forEach((r) => map.set(r.id, { type: "result", ...r }));
     return map;
   }
@@ -709,6 +714,20 @@
           });
         }
       }
+
+      if (q.type === "question_group") {
+        for (const item of (q.items || [])) {
+          const value = answers[item.id];
+          if (isEmpty(value)) continue;
+          const option = item.type === "single_select" ? getOption(item, value) : null;
+          readable.push({
+            questionId: item.id,
+            question: item.label || item.title || item.id,
+            value,
+            answer: option?.label || value
+          });
+        }
+      }
     }
 
     for (const [id, value] of Object.entries(answers || {})) {
@@ -787,7 +806,11 @@
       if (result?.id) scores[result.id] = 0;
     }
 
-    for (const q of (cfg.questions || [])) {
+    const scoreQuestions = (cfg.questions || []).flatMap((question) => (
+      question.type === "question_group" ? (question.items || []) : [question]
+    ));
+
+    for (const q of scoreQuestions) {
       const values = q.type === "multi_select"
         ? (Array.isArray(answers[q.id]) ? answers[q.id] : [])
         : [answers[q.id]];
@@ -843,7 +866,7 @@
   }
 
   function isProgressCountedQuestion(q) {
-    return !!q && PROGRESS_COUNTED_TYPES.has(q.type);
+    return !!q && q.progress_counted !== false && PROGRESS_COUNTED_TYPES.has(q.type);
   }
 
   function longestCountedPathFrom(qmap, cfg, id, seen = new Set()) {
@@ -1248,6 +1271,23 @@
       return true;
     }
 
+    if (q.type === "question_group") {
+      for (const item of q.items || []) {
+        if (item.type === "single_select") {
+          if (item.required !== false && isEmpty(answers[item.id])) return false;
+          continue;
+        }
+
+        const field = {
+          ...item,
+          required: item.required !== false,
+          input_type: item.input_type || item.type || "text"
+        };
+        if (!validateField(field, answers[item.id]).ok) return false;
+      }
+      return true;
+    }
+
     return true;
   }
 
@@ -1294,6 +1334,7 @@
     }
 
     const features = getFeatures(cfg);
+    mount.dataset.estimatorId = cfg.estimatorId || cfg.meta?.estimatorId || "default";
     loadServiceAreaIfNeeded(features);
     const state = loadEstimatorState(cfg, qmap);
 
@@ -1646,6 +1687,127 @@
       });
 
       content.appendChild(formWrap);
+    }
+
+    function renderQuestionGroup(q, content, ui) {
+      const layout = q.layout === "rows" ? "rows" : "grid";
+      const controlClass = q.control === "segmented" ? " is-segmented" : "";
+      const group = mk("div", { class: `quiz_question-group is-${layout}${controlClass}` });
+
+      (q.items || []).forEach((item) => {
+        const itemWrap = mk("div", { class: "quiz_group-item" });
+        const heading = mk("div", { class: "quiz_group-label" }, [
+          item.label || item.title || item.id,
+          item.help ? tooltip(item.help) : null
+        ]);
+        itemWrap.appendChild(heading);
+
+        if (item.subtitle || item.description) {
+          itemWrap.appendChild(mk("div", { class: "quiz_group-subtitle" }, [item.subtitle || item.description]));
+        }
+
+        if (item.type === "single_select") {
+          const useSelect = item.control === "select" || q.control === "select";
+          if (useSelect) {
+            const currentValue = state.answers[item.id] || "";
+            const selectEl = mk("select", {
+              class: "quiz_group-select",
+              "aria-label": item.label || item.title || item.id,
+              onChange: (event) => {
+                state.answers[item.id] = event.target.value;
+                saveState(state, cfg);
+                ui?.updateNextDisabled();
+                if (cfg?.pricing?.update_on_answer_submit_only !== true) ui?.updatePreview();
+              }
+            }, [
+              mk("option", {
+                value: "",
+                disabled: true,
+                selected: isEmpty(currentValue)
+              }, [item.placeholder || "Choose one"]),
+              (item.options || []).map((option) => mk("option", {
+                value: option.value,
+                selected: String(currentValue) === String(option.value)
+              }, [option.label || option.value]))
+            ]);
+
+            itemWrap.appendChild(selectEl);
+            group.appendChild(itemWrap);
+            return;
+          }
+
+          const optionsWrap = mk("div", {
+            class: "quiz_group-options",
+            role: "radiogroup",
+            "aria-label": item.label || item.title || item.id
+          });
+
+          (item.options || []).forEach((option) => {
+            const active = String(state.answers[item.id]) === String(option.value);
+            let optionButton;
+            const selectOption = () => {
+              state.answers[item.id] = String(option.value);
+              optionsWrap.querySelectorAll(".quiz_group-option").forEach((button) => {
+                button.classList.remove("is-selected");
+                button.setAttribute("aria-checked", "false");
+              });
+              optionButton.classList.add("is-selected");
+              optionButton.setAttribute("aria-checked", "true");
+              saveState(state, cfg);
+              ui?.updateNextDisabled();
+              if (cfg?.pricing?.update_on_answer_submit_only !== true) ui?.updatePreview();
+            };
+
+            optionButton = mk("button", {
+              class: `quiz_group-option${active ? " is-selected" : ""}`,
+              type: "button",
+              role: "radio",
+              "aria-checked": active ? "true" : "false",
+              onClick: selectOption
+            }, [
+              mk("span", { class: "quiz_group-option-dot", "aria-hidden": "true" }),
+              mk("span", { class: "quiz_group-option-label" }, [option.label || option.value]),
+              getOptionTooltip(option) ? tooltip(getOptionTooltip(option)) : null
+            ]);
+
+            optionsWrap.appendChild(optionButton);
+          });
+
+          itemWrap.appendChild(optionsWrap);
+        } else {
+          const fieldType = item.input_type || item.type || "text";
+          const inputEl = mk("input", {
+            class: "quiz_text-input-field w-input",
+            type: fieldType === "phone" ? "tel" : fieldType,
+            value: state.answers[item.id] || "",
+            placeholder: item.placeholder || "",
+            autocomplete: item.autocomplete || "",
+            inputmode: item.inputmode || null,
+            min: item.min ?? null,
+            max: item.max ?? null,
+            step: item.step ?? null
+          });
+          const errEl = mk("div", { class: "fieldErr", style: "display:none" }, [""]);
+          const field = { ...item, input_type: fieldType, required: item.required !== false };
+
+          inputEl.addEventListener("input", (event) => {
+            state.answers[item.id] = event.target.value;
+            saveState(state, cfg);
+            const result = validateField(field, state.answers[item.id]);
+            errEl.style.display = result.ok || isEmpty(state.answers[item.id]) ? "none" : "block";
+            errEl.textContent = result.ok ? "" : result.msg;
+            ui?.updateNextDisabled();
+            if (cfg?.pricing?.update_on_answer_submit_only !== true) ui?.updatePreview();
+          });
+
+          itemWrap.appendChild(inputEl);
+          itemWrap.appendChild(errEl);
+        }
+
+        group.appendChild(itemWrap);
+      });
+
+      content.appendChild(group);
     }
 
     function renderQuestionImage(q) {
@@ -2246,6 +2408,7 @@
       else if (q.type === "multi_select") renderMultiSelect(q, content, ui);
       else if (q.type === "slider") renderSlider(q, content, ui);
       else if (q.type === "form") renderForm(q, content, ui);
+      else if (q.type === "question_group") renderQuestionGroup(q, content, ui);
       else if (q.type === "result") renderResult(q, content);
       else if (q.type === "summary") renderSummary(q, content, pr);
       else if (q.type === "submit") content.appendChild(mk("div", { class: "note" }, [q.note || "Submit when you are ready."]));
