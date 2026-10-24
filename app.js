@@ -1600,7 +1600,7 @@
             currentValues.splice(existingIndex, 1);
           } else {
             if (max && currentValues.length >= max) {
-              const replacedValue = currentValues.pop();
+              const replacedValue = currentValues.shift();
               const replacedIndex = opts.findIndex((option) => String(option.value) === String(replacedValue));
               if (replacedIndex >= 0) {
                 const replacedOption = wrap.children[replacedIndex];
