@@ -2,7 +2,7 @@
   "meta": {
     "estimatorId": "tankless-or-not",
     "serviceName": "Tankless water heater quiz",
-    "version": "tankless-or-not-v2"
+    "version": "tankless-or-not-v3"
   },
   "estimatorId": "tankless-or-not",
   "quizName": "Should I Buy a Tankless?",
@@ -15,6 +15,13 @@
     "serviceAreaFilter": true,
     "serviceTitanBooking": true,
     "recommendations": false
+  },
+  "cover": {
+    "title": "Should I Buy a Tankless?",
+    "subtitle": "Find the water heater that fits your home in five quick questions.",
+    "image_url": "https://matthew-callmother.github.io/estimator/assets/tankless-or-not-cover-v2.webp",
+    "image_alt": "Storage and tankless water heaters side by side in a home utility room",
+    "button_label": "Find my fit"
   },
   "start": "priority",
   "questions": [
@@ -88,8 +95,8 @@
       "id": "fuel",
       "type": "single_select",
       "title": "What fuel can your home use?",
-      "subtitle": "Choose what's available where the heater would go.",
-      "help": "If you're unsure, check whether your home has a gas meter or propane tank.",
+      "subtitle": "Left: yellow gas line. Right: electric wiring (often no plug). Propane comes from a tank.",
+      "help": "A gas meter usually means natural gas; a separate outdoor tank means propane.",
       "options": [
         {
           "value": "gas",
@@ -119,7 +126,8 @@
           }
         }
       ],
-      "next": "current_type"
+      "next": "current_type",
+      "image_url": "https://matthew-callmother.github.io/estimator/assets/tankless-or-not-fuel-guide.webp"
     },
     {
       "id": "current_type",
@@ -140,23 +148,33 @@
           "value": "hybrid",
           "label": "Heat pump (hybrid)",
           "image_url": "https://matthew-callmother.github.io/estimator/assets/tankless-or-not-heat-pump.webp",
-          "scores": { "heat_pump": 3, "dual_tank": -100 }
+          "scores": {
+            "heat_pump": 3,
+            "dual_tank": -100
+          }
         },
         {
           "value": "tankless",
           "label": "Tankless",
           "image_url": "https://matthew-callmother.github.io/estimator/assets/tankless-or-not-gas-tankless.webp",
-          "scores": { "gas_tankless": 2, "dual_tank": -100 }
+          "scores": {
+            "gas_tankless": 2,
+            "dual_tank": -100
+          }
         },
         {
           "value": "new",
           "label": "No heater yet / new home",
-          "scores": { "dual_tank": -100 }
+          "scores": {
+            "dual_tank": -100
+          }
         },
         {
           "value": "not_sure",
           "label": "I'm not sure",
-          "scores": { "dual_tank": -100 }
+          "scores": {
+            "dual_tank": -100
+          }
         }
       ],
       "next": "demand"
@@ -173,9 +191,30 @@
           "type": "single_select",
           "label": "People at home",
           "options": [
-            { "value": "1_2", "label": "1-2", "scores": { "electric_tank": 2, "heat_pump": 1 } },
-            { "value": "3_4", "label": "3-4", "scores": { "gas_tank": 1, "gas_tankless": 1 } },
-            { "value": "5_plus", "label": "5+", "scores": { "gas_tankless": 3, "dual_tank": 1 } }
+            {
+              "value": "1_2",
+              "label": "1-2",
+              "scores": {
+                "electric_tank": 2,
+                "heat_pump": 1
+              }
+            },
+            {
+              "value": "3_4",
+              "label": "3-4",
+              "scores": {
+                "gas_tank": 1,
+                "gas_tankless": 1
+              }
+            },
+            {
+              "value": "5_plus",
+              "label": "5+",
+              "scores": {
+                "gas_tankless": 3,
+                "dual_tank": 1
+              }
+            }
           ]
         },
         {
@@ -183,9 +222,31 @@
           "type": "single_select",
           "label": "Bathrooms",
           "options": [
-            { "value": "1_2b", "label": "1-2", "scores": { "electric_tank": 1, "gas_tank": 1 } },
-            { "value": "2_5_4b", "label": "2.5-4", "scores": { "gas_tankless": 2, "gas_tank": 1, "heat_pump": 1 } },
-            { "value": "4_5_plus_b", "label": "4.5+", "scores": { "gas_tankless": 3, "dual_tank": 2 } }
+            {
+              "value": "1_2b",
+              "label": "1-2",
+              "scores": {
+                "electric_tank": 1,
+                "gas_tank": 1
+              }
+            },
+            {
+              "value": "2_5_4b",
+              "label": "2.5-4",
+              "scores": {
+                "gas_tankless": 2,
+                "gas_tank": 1,
+                "heat_pump": 1
+              }
+            },
+            {
+              "value": "4_5_plus_b",
+              "label": "4.5+",
+              "scores": {
+                "gas_tankless": 3,
+                "dual_tank": 2
+              }
+            }
           ]
         }
       ],
@@ -200,19 +261,29 @@
           "value": "garage",
           "label": "Garage",
           "image_url": "https://matthew-callmother.github.io/estimator/assets/tankless-or-not-location-garage.webp",
-          "scores": { "gas_tankless": 1, "heat_pump": 1 }
+          "scores": {
+            "gas_tankless": 1,
+            "heat_pump": 1
+          }
         },
         {
           "value": "attic",
           "label": "Attic",
           "image_url": "https://matthew-callmother.github.io/estimator/assets/tankless-or-not-location-attic.webp",
-          "scores": { "gas_tank": 1, "electric_tank": 1 }
+          "scores": {
+            "gas_tank": 1,
+            "electric_tank": 1
+          }
         },
         {
           "value": "closet",
           "label": "Hall closet",
           "image_url": "https://matthew-callmother.github.io/estimator/assets/tankless-or-not-location-closet.webp",
-          "scores": { "gas_tank": 1, "electric_tank": 1, "heat_pump": -2 }
+          "scores": {
+            "gas_tank": 1,
+            "electric_tank": 1,
+            "heat_pump": -2
+          }
         },
         {
           "value": "not_sure",
